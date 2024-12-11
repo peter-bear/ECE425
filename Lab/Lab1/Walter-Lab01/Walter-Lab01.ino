@@ -103,10 +103,13 @@ int accumTicks[2] = { 0, 0 };         //variable to hold accumulated ticks since
 
 // Helper Functions
 const float pi = 3.14159;
-const float wheelRadius = 1.7; //inches
-const int stepsPerRevol = 800; 
-const float robotWidth = 9.0; // inches
-const int defaultStepSpeed = 500; // steps per second
+const float wheelRadius = 1.7;  //inches
+const int stepsPerRevol = 800;
+const float robotWidth = 9.0;      // inches
+const int defaultStepSpeed = 500;  // steps per second
+
+const int PIDThreshold = 50;
+const int PIDkp = 1;
 
 
 //interrupt function to count left encoder tickes
@@ -386,8 +389,23 @@ void move6() {
   steppers.runSpeedToPosition();  // Blocks until all are in position
 }
 
-int length2Steps(double length){
-  return round(stepsPerRevol*length/(2*pi*wheelRadius));
+void PIDControl(int leftDistance, int rightDistance) {
+  long leftDistanceError = leftDistance - encoder[LEFT];
+  long rightDistanceError = rightDistance - encoder[RIGHT];
+  while (abs(leftDistanceError) > PIDThreshold || abs(rightDistanceError) > PIDThreshold) {
+    long outputLeft = leftDistanceError * PIDkp;
+    long outputRight = rightDistanceError * PIDkp;
+    stepperLeft.move(outputLeft);
+    stepperRight.move(outputRight);
+    steppers.runSpeedToPosition();
+    leftDistanceError = leftDistance - encoder[LEFT];
+    rightDistanceError = rightDistance - encoder[RIGHT];
+  }
+  steppers.stop();
+}
+
+int length2Steps(double length) {
+  return round(stepsPerRevol * length / (2 * pi * wheelRadius));
 }
 
 /*
@@ -395,7 +413,7 @@ int length2Steps(double length){
 */
 void pivot(int direction, double angle, int speed) {
   if (direction != 1 && direction != -1 && angle < 0) return;
-  double stepperMoveLength = 2*pi*robotWidth*angle/360;
+  double stepperMoveLength = 2 * pi * robotWidth * angle / 360;
   int stepperMovePos = length2Steps(stepperMoveLength);
 
   Serial.println(stepperMoveLength);
@@ -406,7 +424,7 @@ void pivot(int direction, double angle, int speed) {
     stepperLeft.setSpeed(speed);  //set left motor speed
   } else if (direction == -1) {
     stepperRight.move(stepperMovePos);
-    stepperRight.setSpeed(speed);  //set right motor speed 
+    stepperRight.setSpeed(speed);  //set right motor speed
   }
   steppers.runSpeedToPosition();
 }
@@ -416,7 +434,7 @@ void pivot(int direction, double angle, int speed) {
 */
 void spin(int direction, double angle, int speed) {
   if (direction != 1 && direction != -1 && angle < 0) return;
-  double stepperMoveLength = pi*robotWidth*angle/360;
+  double stepperMoveLength = pi * robotWidth * angle / 360;
   int stepperMovePos = length2Steps(stepperMoveLength);
 
   if (direction == 1) {
@@ -428,23 +446,31 @@ void spin(int direction, double angle, int speed) {
   } else if (direction == -1) {
     stepperLeft.move(-stepperMovePos);
     stepperLeft.setSpeed(-speed);
-    
+
     stepperRight.move(stepperMovePos);
     stepperRight.setSpeed(speed);
   }
 
   steppers.runSpeedToPosition();
+
+  // use Encoder PID Control
+  if (direction == 1) {
+    PIDControl(stepperMovePos, -stepperMovePos);
+  } else if (direction == -1) {
+    PIDControl(-stepperMovePos, stepperMovePos);
+  }
+  
 }
 
 /*
   INSERT DESCRIPTION HERE, what are the inputs, what does it do, functions used
 */
-void turn(int direction, double timeDelay,int velocityDiff) {
+void turn(int direction, double timeDelay, int velocityDiff) {
   if (direction != 1 && direction != -1) return;
   int speedLow = 500;
   int speedHigh = speedLow + velocityDiff;
-  int distanceShort = round(speedLow*timeDelay);
-  int distanceLong = round(speedHigh*timeDelay);
+  int distanceShort = round(speedLow * timeDelay);
+  int distanceLong = round(speedHigh * timeDelay);
   if (direction == 1) {
     stepperLeft.move(distanceLong);
     stepperLeft.setSpeed(speedHigh);  //set left motor speed
@@ -457,7 +483,7 @@ void turn(int direction, double timeDelay,int velocityDiff) {
     stepperRight.setSpeed(speedHigh);  //set right motor speed
   }
 
-    steppers.runSpeedToPosition();
+  steppers.runSpeedToPosition();
 }
 /*
   INSERT DESCRIPTION HERE, what are the inputs, what does it do, functions used
@@ -471,6 +497,8 @@ void forward(double distance, int speed) {
   stepperLeft.setSpeed(speed);   //set left motor speed
   stepperRight.setSpeed(speed);  //set right motor spee
   steppers.runSpeedToPosition();
+
+  PIDControl(stepperMovePos, stepperMovePos);
 }
 
 /*
@@ -486,15 +514,15 @@ void reverse(double distance, int speed) {
 void moveCircle(double diam, int dir, int speed) {
   if (dir != 1 && dir != -1 && diam <= robotWidth) return;
   Serial.println("moveCircle function");
-  digitalWrite(redLED, HIGH);   //turn on red LED
+  digitalWrite(redLED, HIGH);  //turn on red LED
 
-  double stepperInnerMoveLength = pi*(diam - robotWidth);
+  double stepperInnerMoveLength = pi * (diam - robotWidth);
   int stepperInnerMovePos = length2Steps(stepperInnerMoveLength);
 
-  double stepperOuterMoveLength = pi*(diam + robotWidth);
+  double stepperOuterMoveLength = pi * (diam + robotWidth);
   int stepperOuterMovePos = length2Steps(stepperOuterMoveLength);
 
-  int innerSpeed = round(speed*(diam/2-robotWidth/2)/(robotWidth/2+diam/2));
+  int innerSpeed = round(speed * (diam / 2 - robotWidth / 2) / (robotWidth / 2 + diam / 2));
   int outerSpeed = speed;
 
   if (dir == 1) {
@@ -513,7 +541,6 @@ void moveCircle(double diam, int dir, int speed) {
 
 
   steppers.runSpeedToPosition();
-
 }
 
 /*
@@ -522,7 +549,7 @@ void moveCircle(double diam, int dir, int speed) {
 */
 void moveFigure8(double diam) {
   Serial.println("moveFigure8 function");
-  digitalWrite(redLED, HIGH);   //turn on red LED
+  digitalWrite(redLED, HIGH);  //turn on red LED
   digitalWrite(grnLED, LOW);   //turn off green LED
   digitalWrite(ylwLED, HIGH);  //turn on yellow LED
 
@@ -531,47 +558,43 @@ void moveFigure8(double diam) {
   moveCircle(diam, 1, defaultStepSpeed);
 }
 
-void goToAngle(double angle){
-  digitalWrite(grnLED, HIGH);   //turn on green LED
+void goToAngle(double angle) {
+  digitalWrite(grnLED, HIGH);  //turn on green LED
 
   int direction = 0;
   if (angle > 0) {
     direction = -1;
-  }
-  else if (angle < 0) {
+  } else if (angle < 0) {
     direction = 1;
-  }else{
+  } else {
     return;
   }
   angle = abs(angle);
   spin(direction, angle, defaultStepSpeed);
 }
 
-void goToGoal(double x, double y){
+void goToGoal(double x, double y) {
   digitalWrite(redLED, LOW);   //turn off red LED
-  digitalWrite(grnLED, HIGH);   //turn on green LED
+  digitalWrite(grnLED, HIGH);  //turn on green LED
   digitalWrite(ylwLED, HIGH);  //turn on yellow LED
 
-  double distance = sqrt(pow(x, 2)+pow(y, 2));
-  double angleRadian = atan(y/x);
-  double angleDegree = angleRadian*180.0/pi;
+  double distance = sqrt(pow(x, 2) + pow(y, 2));
+  double angleRadian = atan(y / x);
+  double angleDegree = angleRadian * 180.0 / pi;
 
-  if(x > 0 && y > 0){
+  if (x > 0 && y > 0) {
     angleDegree = angleDegree - 90;
-  }else if(x <0 && y > 0){
+  } else if (x < 0 && y > 0) {
     angleDegree = 90 + angleDegree;
-  }else if(x < 0 && y < 0){
+  } else if (x < 0 && y < 0) {
     angleDegree = 90 + angleDegree;
-  }else if(x > 0 && y < 0){
+  } else if (x > 0 && y < 0) {
     angleDegree = angleDegree - 90;
   }
-  
+
   goToAngle(angleDegree);
   delay(100);
   forward(distance, defaultStepSpeed);
-
-
-
 }
 
 
