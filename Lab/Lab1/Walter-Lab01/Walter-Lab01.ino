@@ -483,14 +483,95 @@ void reverse(double distance, int speed) {
 /*
   INSERT DESCRIPTION HERE, what are the inputs, what does it do, functions used
 */
-void moveCircle(int diam, int dir) {
+void moveCircle(double diam, int dir, int speed) {
+  if (dir != 1 && dir != -1 && diam <= robotWidth) return;
+  Serial.println("moveCircle function");
+  digitalWrite(redLED, HIGH);   //turn on red LED
+
+  double stepperInnerMoveLength = pi*(diam - robotWidth);
+  int stepperInnerMovePos = length2Steps(stepperInnerMoveLength);
+
+  double stepperOuterMoveLength = pi*(diam + robotWidth);
+  int stepperOuterMovePos = length2Steps(stepperOuterMoveLength);
+
+  int innerSpeed = round(speed*(diam/2-robotWidth/2)/(robotWidth/2+diam/2));
+  int outerSpeed = speed;
+
+  if (dir == 1) {
+    stepperLeft.move(stepperOuterMovePos);
+    stepperLeft.setSpeed(outerSpeed);
+
+    stepperRight.move(stepperInnerMovePos);
+    stepperRight.setSpeed(innerSpeed);
+  } else if (dir == -1) {
+    stepperLeft.move(stepperInnerMovePos);
+    stepperLeft.setSpeed(innerSpeed);
+
+    stepperRight.move(stepperOuterMovePos);
+    stepperRight.setSpeed(outerSpeed);
+  }
+
+
+  steppers.runSpeedToPosition();
+
 }
 
 /*
   The moveFigure8() function takes the diameter in inches as the input. It uses the moveCircle() function
   twice with 2 different direcitons to create a figure 8 with circles of the given diameter.
 */
-void moveFigure8(int diam) {
+void moveFigure8(double diam) {
+  Serial.println("moveFigure8 function");
+  digitalWrite(redLED, HIGH);   //turn on red LED
+  digitalWrite(grnLED, LOW);   //turn off green LED
+  digitalWrite(ylwLED, HIGH);  //turn on yellow LED
+
+  moveCircle(diam, -1, defaultStepSpeed);
+  delay(500);
+  moveCircle(diam, 1, defaultStepSpeed);
+}
+
+void goToAngle(double angle){
+  digitalWrite(grnLED, HIGH);   //turn on green LED
+
+  int direction = 0;
+  if (angle > 0) {
+    direction = -1;
+  }
+  else if (angle < 0) {
+    direction = 1;
+  }else{
+    return;
+  }
+  angle = abs(angle);
+  spin(direction, angle, defaultStepSpeed);
+}
+
+void goToGoal(double x, double y){
+  digitalWrite(redLED, LOW);   //turn off red LED
+  digitalWrite(grnLED, HIGH);   //turn on green LED
+  digitalWrite(ylwLED, HIGH);  //turn on yellow LED
+
+  double distance = sqrt(pow(x, 2)+pow(y, 2));
+  double angleRadian = atan(y/x);
+  double angleDegree = angleRadian*180.0/pi;
+
+  if(x > 0 && y > 0){
+    angleDegree = angleDegree - 90;
+  }else if(x <0 && y > 0){
+    angleDegree = 90 + angleDegree;
+  }else if(x < 0 && y < 0){
+    angleDegree = 90 + angleDegree;
+  }else if(x > 0 && y < 0){
+    angleDegree = angleDegree - 90;
+  }
+  
+  goToAngle(angleDegree);
+  delay(100);
+  forward(distance, defaultStepSpeed);
+
+
+
 }
 
 
@@ -518,10 +599,26 @@ void loop() {
   // move6(); //move to target position with 2 different speeds - relative position
 
   // forward(24.0, defaultStepSpeed);
+  // delay(1000);
   // reverse(24.0, defaultStepSpeed);
-  // pivot(1, 90.0, defaultStepSpeed);
+  // delay(1000);
+  // spin(-1, 90.0, defaultStepSpeed);
+  // delay(1000);
   // spin(1, 90.0, defaultStepSpeed);
-  turn(-1, 5.0, 200);
+  // delay(1000);
+  // pivot(-1, 90.0, defaultStepSpeed);
+  // delay(1000);
+  // pivot(1, 90.0, defaultStepSpeed);
+  // delay(1000);
+  // turn(-1, 5.0, 200);
+  // delay(1000);
+  // turn(1, 5.0, 200);
+
+  // moveCircle(24.0, -1, defaultStepSpeed);
+  // moveFigure8(24.0);
+
+  // goToAngle(-45.0);
+  goToGoal(24.0, 24.0);
 
   //Uncomment to read Encoder Data (uncomment to read on serial monitor)
   // print_encoder_data();   //prints encoder data
