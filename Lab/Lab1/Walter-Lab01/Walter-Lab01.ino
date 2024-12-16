@@ -1,7 +1,7 @@
 
 /*
   Walter-Lab01.ino
-  Yao Xiong & Bizheng Yang 2024/12/15
+  Yao Xiong & Zhengyang Bi 2024/12/15
 
   This program will introduce using the stepper motor library to create motion algorithms for the robot.
   The motions will be go to angle, go to goal, move in a circle, square, figure eight and teleoperation (stop, forward, spin, reverse, turn)
