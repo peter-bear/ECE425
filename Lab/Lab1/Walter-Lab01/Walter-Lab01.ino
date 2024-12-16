@@ -1,16 +1,7 @@
 
 /*
-  NOTE:
-   THIS IS THE STANDARD FOR HOW TO PROPERLY COMMENT CODE
-   Header comment has program, name, author name, date created
-   Header comment has brief description of what program does
-   Header comment has list of key functions and variables created with decription
-   There are sufficient in line and block comments in the body of the program
-   Variables and functions have logical, intuitive names
-   Functions are used to improve modularity, clarity, and readability
-***********************************
-  RobotIntro.ino
-  Carlotta Berry 11.21.16
+  Walter-Lab01.ino
+  Yao Xiong & Bizheng Yang 2024/12/15
 
   This program will introduce using the stepper motor library to create motion algorithms for the robot.
   The motions will be go to angle, go to goal, move in a circle, square, figure eight and teleoperation (stop, forward, spin, reverse, turn)
@@ -19,10 +10,10 @@
   moveCircle - given the diameter in inches and direction of clockwise or counterclockwise, move the robot in a circle with that diameter
   moveFigure8 - given the diameter in inches, use the moveCircle() function with direction input to create a Figure 8
   forward, reverse - both wheels move with same velocity, same direction
-  pivot- one wheel stationary, one wheel moves forward or back
-  spin - both wheels move with same velocity opposite direction
-  turn - both wheels move with same direction different velocity
-  stop -both wheels stationary
+  pivot- one wheel stationary, one wheel moves forward or back, given the direction of to left or to right, the pivot angle in degrees, and speed in steps per second
+  spin - both wheels move with same velocity opposite direction, given the direction of to left or to right, the spin angle in degrees, and speed in steps per second
+  turn - both wheels move with same direction different velocity, give the direction of to left or to right, the turning time in seconds, and velocity difference in steps per second
+  stop - both wheels stationary
 
   Interrupts
   https://www.arduino.cc/reference/en/language/functions/external-interrupts/attachinterrupt/
@@ -100,22 +91,22 @@ volatile long encoder[2] = { 0, 0 };  //interrupt variable to hold number of enc
 int lastSpeed[2] = { 0, 0 };          //variable to hold encoder speed (left, right)
 int accumTicks[2] = { 0, 0 };         //variable to hold accumulated ticks since last reset
 
-#define TURN_LEFT -1
-#define TURN_RIGHT 1
+#define TO_LEFT -1                    // direction variables to left
+#define TO_RIGHT 1                    // direction variables to right
 
-#define CLOCKWISE 1
-#define COUNTERCLOCKWISE -1
+#define CLOCKWISE 1                    //direction variables for clockwise motion
+#define COUNTERCLOCKWISE -1           //direction variables for counterclockwise motion
 
 // Helper Functions
-const float pi = 3.14159;
-const float wheelRadius = 1.7;  //inches
-const int stepsPerRevol = 800;
-const float robotWidth = 9.0;      // inches
-const int defaultStepSpeed = 400;  // steps per second
+const float pi = 3.14159;               //pi
+const float wheelRadius = 1.7;          //robot wheel radius in inches
+const int stepsPerRevol = 800;          //robot wheel steps per revolution
+const float robotWidth = 9.0;           //robot width in inches
+const int defaultStepSpeed = 400;       //robot default speed in steps per second
 
-const int PIDThreshold = 50;
-const int PIDkp = 1;
-const int encoderRatio = 20;
+const int PIDThreshold = 50;            //PID threshold
+const int PIDkp = 1;                    //PID proportional gain
+const int encoderRatio = 20;            //ratio between the encoder ticks and steps
 
 
 //interrupt function to count left encoder tickes
@@ -391,23 +382,42 @@ void move6() {
   steppers.runSpeedToPosition();  // Blocks until all are in position
 }
 
+/*this function will reset the encoders*/
 void resetEncoder() {
   encoder[LEFT] = 0;   //clear the left encoder data buffer
   encoder[RIGHT] = 0;  //clear the right encoder data buffer
 }
 
+/*this function will stop the steppers*/
 void stopSteppers() {
   stepperRight.stop();
   stepperLeft.stop();
 }
 
+/*
+  This function performs PID control to adjust the position of the robot's wheels.
+  Inputs:
+    - leftDistance: Target distance for the left wheel.
+    - rightDistance: Target distance for the right wheel.
+  The function calculates the error between the target and actual encoder values,
+  applies a proportional control to determine the necessary movement adjustments,
+  and sets the wheel speeds accordingly. The steppers are then run to the computed positions.
+  If the error is within a specified threshold, the function stops the steppers.
+*/
+
+
 void PIDControl(int leftDistance, int rightDistance) {
+  // Calculate the error between the target and actual encoder values
   long leftDistanceError = abs(leftDistance) - encoder[LEFT]*encoderRatio;
   long rightDistanceError = abs(rightDistance) - encoder[RIGHT]*encoderRatio;
+
+  // Apply proportional control
   if (abs(leftDistanceError) > PIDThreshold || abs(rightDistanceError) > PIDThreshold) {
     long outputLeft = leftDistanceError * PIDkp;
     long outputRight = rightDistanceError * PIDkp;
 
+
+    // Set the wheel speeds
     if(leftDistanceError<0){
       stepperLeft.setSpeed(-stepperLeft.speed());
     }
@@ -415,6 +425,7 @@ void PIDControl(int leftDistance, int rightDistance) {
       stepperRight.setSpeed(-stepperRight.speed());
     }
     
+    // Run the steppers
     stepperLeft.move(outputLeft);
     stepperRight.move(outputRight);
     steppers.runSpeedToPosition();
@@ -422,45 +433,63 @@ void PIDControl(int leftDistance, int rightDistance) {
   stopSteppers();
 }
 
+/**
+ * Converts a length in inches to a number of steps for the robot.
+ * @param length the length in inches to convert
+ * @return the number of steps for the robot to move the given length
+ */
+
 int length2Steps(double length) {
   return round(stepsPerRevol * length / (2 * pi * wheelRadius));
 }
 
-/*
-  INSERT DESCRIPTION HERE, what are the inputs, what does it do, functions used
-*/
+
+/**
+ * Pivots the robot about its center by rotating one wheel and keeping the other stationary.
+ * @param direction the direction of the pivot (TO_LEFT or TO_RIGHT)
+ * @param angle the angle of the pivot in degrees
+ * @param speed the speed of the pivot in steps per second
+ */
 void pivot(int direction, double angle, int speed) {
-  if (direction != TURN_LEFT && direction != TURN_RIGHT && angle < 0) return;
+  if (direction != TO_LEFT && direction != TO_RIGHT && angle < 0) return;
+
+  // calculate the turn length, using the circle formula
   double stepperMoveLength = 2 * pi * robotWidth * angle / 360;
   int stepperMovePos = length2Steps(stepperMoveLength);
 
-
-  if (direction == TURN_RIGHT) {
+  if (direction == TO_RIGHT) {
     stepperLeft.move(stepperMovePos);
     stepperLeft.setSpeed(speed);  //set left motor speed
-  } else if (direction == TURN_LEFT) {
+  } else if (direction == TO_LEFT) {
     stepperRight.move(stepperMovePos);
     stepperRight.setSpeed(speed);  //set right motor speed
   }
   steppers.runSpeedToPosition();
 }
 
-/*
-  INSERT DESCRIPTION HERE, what are the inputs, what does it do, functions used
-*/
+
+/**
+ * Spins the robot about its center by rotating both wheels in opposite directions.
+ * @param direction the direction of the spin (TO_LEFT or TO_RIGHT)
+ * @param angle the angle of the spin in degrees
+ * @param speed the speed of the spin in steps per second
+ */
+
 void spin(int direction, double angle, int speed) {
-  if (direction != TURN_LEFT && direction != TURN_RIGHT && angle < 0) return;
+  if (direction != TO_LEFT && direction != TO_RIGHT && angle < 0) return;
   resetEncoder();
+
+  // calculate the turn length, using the circle formula
   double stepperMoveLength = pi * robotWidth * angle / 360;
   int stepperMovePos = length2Steps(stepperMoveLength);
 
-  if (direction == TURN_RIGHT) {
+  if (direction == TO_RIGHT) {
     stepperLeft.move(stepperMovePos);
     stepperLeft.setSpeed(speed);
 
     stepperRight.move(-stepperMovePos);
     stepperRight.setSpeed(-speed);
-  } else if (direction == TURN_LEFT) {
+  } else if (direction == TO_LEFT) {
     stepperLeft.move(-stepperMovePos);
     stepperLeft.setSpeed(-speed);
 
@@ -471,28 +500,36 @@ void spin(int direction, double angle, int speed) {
   steppers.runSpeedToPosition();
 
   // use Encoder PID Control
-  if (direction == TURN_RIGHT) {
+  if (direction == TO_RIGHT) {
     PIDControl(stepperMovePos, -stepperMovePos);
-  } else if (direction == TURN_LEFT) {
+  } else if (direction == TO_LEFT) {
     PIDControl(-stepperMovePos, stepperMovePos);
   }
 }
 
-/*
-  INSERT DESCRIPTION HERE, what are the inputs, what does it do, functions used
-*/
+
+/**
+ * Turns the robot by moving each wheel a different distance at a different speed.
+ * @param direction the direction of the turn (TO_LEFT or TO_RIGHT)
+ * @param timeDelay the time in seconds to move each wheel
+ * @param velocityDiff the difference in speed between the two wheels
+ */
 void turn(int direction, double timeDelay, int velocityDiff) {
-  if (direction != TURN_LEFT && direction != TURN_RIGHT) return;
+  if (direction != TO_LEFT && direction != TO_RIGHT) return;
   int speedLow = 500;
   int speedHigh = speedLow + velocityDiff;
+  
+  // calculate the distance for each wheel
   int distanceShort = round(speedLow * timeDelay);
   int distanceLong = round(speedHigh * timeDelay);
-  if (direction == TURN_RIGHT) {
+
+
+  if (direction == TO_RIGHT) {
     stepperLeft.move(distanceLong);
     stepperLeft.setSpeed(speedHigh);  //set left motor speed
     stepperRight.move(distanceShort);
     stepperRight.setSpeed(speedLow);  //set right motor speed
-  } else if (direction == TURN_LEFT) {
+  } else if (direction == TO_LEFT) {
     stepperLeft.move(distanceShort);
     stepperLeft.setSpeed(speedLow);  //set left motor speed
     stepperRight.move(distanceLong);
@@ -501,9 +538,13 @@ void turn(int direction, double timeDelay, int velocityDiff) {
 
   steppers.runSpeedToPosition();
 }
-/*
-  INSERT DESCRIPTION HERE, what are the inputs, what does it do, functions used
-*/
+
+
+/**
+ * Moves the robot forward by a specified distance at a specified speed.
+ * @param distance the distance in inches to move the robot
+ * @param speed the speed in steps per second to move the robot
+ */
 void forward(double distance, int speed) {
   resetEncoder();
 
@@ -519,27 +560,43 @@ void forward(double distance, int speed) {
   PIDControl(stepperMovePos, stepperMovePos);
 }
 
-/*
-  INSERT DESCRIPTION HERE, what are the inputs, what does it do, functions used
-*/
+
+/**
+ * Moves the robot backward by a specified distance at a specified speed.
+ * @param distance the distance in inches to move the robot backward
+ * @param speed the speed in steps per second to move the robot backward
+ * The function calls the forward() function with negative values of distance and speed.
+ */
+
 void reverse(double distance, int speed) {
   forward(-distance, -speed);
 }
 
-/*
-  INSERT DESCRIPTION HERE, what are the inputs, what does it do, functions used
-*/
-void moveCircle(double diam, int dir, int speed) {
+
+/**
+ * Moves the robot in a circular path with a specified diameter and direction.
+ * Turns on the red LED during the movement.
+ * Calculates the move position and speed for each wheel based on the diameter
+ * and the robot's width, adjusting for clockwise or counterclockwise movement.
+ * @param diam the diameter of the circle in inches
+ * @param dir the direction of the circle (CLOCKWISE or COUNTERCLOCKWISE)
+ */
+
+void moveCircle(double diam, int dir) {
   if (dir != CLOCKWISE && dir != COUNTERCLOCKWISE && diam <= robotWidth) return;
   Serial.println("moveCircle function");
   digitalWrite(redLED, HIGH);  //turn on red LED
 
+  int speed = defaultStepSpeed;
+
+  // Calculate the move position and speed for each wheel
   double stepperInnerMoveLength = pi * (diam - robotWidth);
   int stepperInnerMovePos = length2Steps(stepperInnerMoveLength);
 
   double stepperOuterMoveLength = pi * (diam + robotWidth);
   int stepperOuterMovePos = length2Steps(stepperOuterMoveLength);
 
+  // Calculate the speed for each wheel
   int innerSpeed = round(speed * (diam / 2 - robotWidth / 2) / (robotWidth / 2 + diam / 2));
   int outerSpeed = speed;
 
@@ -561,22 +618,28 @@ void moveCircle(double diam, int dir, int speed) {
   steppers.runSpeedToPosition();
 }
 
-/*
-  The moveFigure8() function takes the diameter in inches as the input. It uses the moveCircle() function
-  twice with 2 different direcitons to create a figure 8 with circles of the given diameter.
-*/
+
+/**
+ * Moves the robot in a figure-eight pattern, with the specified diameter.
+ * @param diam the diameter of the figure-eight in inches
+ */
 void moveFigure8(double diam) {
   Serial.println("moveFigure8 function");
   digitalWrite(redLED, HIGH);  //turn on red LED
   digitalWrite(grnLED, LOW);   //turn off green LED
   digitalWrite(ylwLED, HIGH);  //turn on yellow LED
 
-  moveCircle(diam, COUNTERCLOCKWISE, defaultStepSpeed);
+  moveCircle(diam, COUNTERCLOCKWISE);
   delay(500);
-  moveCircle(diam, CLOCKWISE, defaultStepSpeed);
+  moveCircle(diam, CLOCKWISE);
 }
 
+/**
+ * Moves the robot in a square pattern with the specified side length.
+ * @param distance the length of one side of the square in inches
+ */
 void moveSquare(double distance) {
+  Serial.println("moveSquare function");
   digitalWrite(redLED, HIGH);   //turn on red LED
   digitalWrite(grnLED, HIGH);  //turn on green LED
   digitalWrite(ylwLED, HIGH);  //turn on yellow LED
@@ -598,15 +661,21 @@ void moveSquare(double distance) {
   delay(500);
 }
 
+/**
+ * Turns the robot to the absolute angle specified.
+ * @param angle the absolute angle to turn to in degrees
+ * @note Positive angles are to the left, negative angles are to the right
+ */
 void goToAngle(double angle) {
+  Serial.println("goToAngle function");
   digitalWrite(grnLED, HIGH);  //turn on green LED
   // if angle larger than 0, turn left
   // if angle less than 0, turn right
   int direction = 0;
   if (angle > 0) {
-    direction = TURN_LEFT;
+    direction = TO_LEFT;
   } else if (angle < 0) {
-    direction = TURN_RIGHT;
+    direction = TO_RIGHT;
   } else {
     return;
   }
@@ -614,7 +683,14 @@ void goToAngle(double angle) {
   spin(direction, angle, defaultStepSpeed);
 }
 
+/**
+ * Moves the robot to the goal location (x, y) in inches.
+ * @param x the x-coordinate of the goal in inches
+ * @param y the y-coordinate of the goal in inches
+ * @note The robot will first turn to the correct angle, then move forward to the goal
+ */
 void goToGoal(double x, double y) {
+  Serial.println("goToGoal function");
   digitalWrite(redLED, LOW);   //turn off red LED
   digitalWrite(grnLED, HIGH);  //turn on green LED
   digitalWrite(ylwLED, HIGH);  //turn on yellow LED
@@ -662,23 +738,20 @@ void loop() {
   // move5(); //move continuously with 2 different speeds
   // move6(); //move to target position with 2 different speeds - relative position
 
-  
-
   // forward(24.0, defaultStepSpeed);
   // reverse(24.0, defaultStepSpeed);
-  // pivot(TURN_LEFT, 90.0, defaultStepSpeed);
-  // pivot(TURN_RIGHT, 90.0, defaultStepSpeed);
-  // spin(TURN_LEFT, 90.0, defaultStepSpeed);
-  // spin(TURN_RIGHT, 90.0, defaultStepSpeed);
+  // pivot(TO_LEFT, 90.0, defaultStepSpeed);
+  // pivot(TO_RIGHT, 90.0, defaultStepSpeed);
+  // spin(TO_LEFT, 90.0, defaultStepSpeed);
+  // spin(TO_RIGHT, 90.0, defaultStepSpeed);
 
-  // moveCircle(24.0, COUNTERCLOCKWISE, defaultStepSpeed);
+  // moveCircle(24.0, COUNTERCLOCKWISE);
   // moveFigure8(24.0);
   // moveSquare(36.0);
 
   // goToGoal(24.0, 24.0);
   // goToGoal(-36.0, -48.0);
   
-
 
   //Uncomment to read Encoder Data (uncomment to read on serial monitor)
   // print_encoder_data();   //prints encoder data
