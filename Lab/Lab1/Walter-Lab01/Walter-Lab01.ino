@@ -215,173 +215,6 @@ void runToStop(void) {
   }
 }
 
-
-/*
-   The move1() function will move the robot forward one full rotation and backwared on
-   full rotation.  Recall that that there 200 steps in one full rotation or 1.8 degrees per
-   step. This function uses setting the step pins high and low with delays to move. The speed is set by
-   the length of the delay.
-*/
-void move1() {
-  Serial.println("move1 function");
-  digitalWrite(redLED, HIGH);    //turn on red LED
-  digitalWrite(grnLED, LOW);     //turn off green LED
-  digitalWrite(ylwLED, LOW);     //turn off yellow LED
-  digitalWrite(ltDirPin, HIGH);  // Enables the motor to move in a particular direction
-  digitalWrite(rtDirPin, HIGH);  // Enables the motor to move in a particular direction
-  // Makes 800 pulses for making one full cycle rotation
-  for (int x = 0; x < 800; x++) {
-    digitalWrite(rtStepPin, HIGH);
-    digitalWrite(ltStepPin, HIGH);
-    delayMicroseconds(stepTime);
-    digitalWrite(rtStepPin, LOW);
-    digitalWrite(ltStepPin, LOW);
-    delayMicroseconds(stepTime);
-  }
-  delay(1000);                  // One second delay
-  digitalWrite(ltDirPin, LOW);  // Enables the motor to move in opposite direction
-  digitalWrite(rtDirPin, LOW);  // Enables the motor to move in opposite direction
-  // Makes 800 pulses for making one full cycle rotation
-  for (int x = 0; x < 800; x++) {
-    digitalWrite(rtStepPin, HIGH);
-    digitalWrite(ltStepPin, HIGH);
-    delayMicroseconds(stepTime);
-    digitalWrite(rtStepPin, LOW);
-    digitalWrite(ltStepPin, LOW);
-    delayMicroseconds(stepTime);
-  }
-  delay(1000);  // One second delay
-}
-
-/*
-   The move2() function will use AccelStepper library functions to move the robot
-   move() is a library function for relative movement to set a target position
-   moveTo() is a library function for absolute movement to set a target position
-   stop() is a library function that causes the stepper to stop as quickly as possible
-   run() is a library function that uses accel and decel to achieve target position, no blocking
-   runSpeed() is a library function that uses constant speed to achieve target position, no blocking
-   runToPosition() is a library function that uses blocking with accel/decel to achieve target position
-   runSpeedToPosition() is a library function that uses constant speed to achieve target posiiton, no blocking
-   runToNewPosition() is a library function that uses blocking with accel/decel to achieve target posiiton
-*/
-void move2() {
-  Serial.println("move2 function");
-  digitalWrite(redLED, LOW);          //turn off red LED
-  digitalWrite(grnLED, HIGH);         //turn on green LED
-  digitalWrite(ylwLED, LOW);          //turn off yellow LED
-  stepperRight.moveTo(800);           //move one full rotation forward relative to current position
-  stepperLeft.moveTo(800);            //move one full rotation forward relative to current position
-  stepperRight.setSpeed(1000);        //set right motor speed
-  stepperLeft.setSpeed(1000);         //set left motor speed
-  stepperRight.runSpeedToPosition();  //move right motor
-  stepperLeft.runSpeedToPosition();   //move left motor
-  runToStop();                        //run until the robot reaches the target
-  delay(1000);                        // One second delay
-  stepperRight.moveTo(0);             //move one full rotation backward relative to current position
-  stepperLeft.moveTo(0);              //move one full rotation backward relative to current position
-  stepperRight.setSpeed(1000);        //set right motor speed
-  stepperLeft.setSpeed(1000);         //set left motor speed
-  stepperRight.runSpeedToPosition();  //move right motor
-  stepperLeft.runSpeedToPosition();   //move left motor
-  runToStop();                        //run until the robot reaches the target
-  delay(1000);                        // One second delay
-}
-
-/*
-   The move3() function will use the MultiStepper() class to move both motors at once
-   move() is a library function for relative movement to set a target position
-   moveTo() is a library function for absolute movement to set a target position
-   stop() is a library function that causes the stepper to stop as quickly as possible
-   run() is a library function that uses accel and decel to achieve target position, no blocking
-   runSpeed() is a library function that uses constant speed to achieve target position, no blocking
-   runToPosition() is a library function that uses blocking with accel/decel to achieve target position
-   runSpeedToPosition() is a library function that uses constant speed to achieve target posiiton, no blocking
-   runToNewPosition() is a library function that uses blocking with accel/decel to achieve target posiiton
-*/
-void move3() {
-  Serial.println("move3 function");
-  digitalWrite(redLED, LOW);   //turn off red LED
-  digitalWrite(grnLED, LOW);   //turn off green LED
-  digitalWrite(ylwLED, HIGH);  //turn on yellow LED
-  long positions[2];           // Array of desired stepper positions
-  positions[0] = 800;          //right motor absolute position
-  positions[1] = 800;          //left motor absolute position
-  steppers.moveTo(positions);
-  steppers.runSpeedToPosition();  // Blocks until all are in position
-  delay(1000);                    //wait one second
-  // Move to a different coordinate
-  positions[0] = 0;  //right motor absolute position
-  positions[1] = 0;  //left motor absolute position
-  steppers.moveTo(positions);
-  steppers.runSpeedToPosition();  // Blocks until all are in position
-  delay(1000);                    //wait one second
-}
-
-/*this function will move to target at 2 different speeds - absolute position*/
-void move4() {
-
-  Serial.println("move4 function");
-  int leftPos = 5000;   //right motor absolute position
-  int rightPos = 1000;  //left motor absolute position
-  int leftSpd = 1000;   //right motor speed
-  int rightSpd = 200;   //left motor speed
-
-  digitalWrite(redLED, HIGH);  //turn on red LED
-  digitalWrite(grnLED, HIGH);  //turn on green LED
-  digitalWrite(ylwLED, LOW);   //turn off yellow LED
-
-  stepperLeft.moveTo(leftPos);    //left motor absolute position
-  stepperRight.moveTo(rightPos);  //right motor absolute position
-  stepperLeft.setSpeed(leftSpd);
-  stepperRight.setSpeed(rightSpd);
-  steppers.runSpeedToPosition();  // Blocks until all are in position
-
-  stepperLeft.setCurrentPosition(0);
-  stepperRight.setCurrentPosition(0);
-}
-
-/*This function will move continuously at 2 different speeds*/
-void move5() {
-  Serial.println("move5 function");
-  digitalWrite(redLED, LOW);   //turn off red LED
-  digitalWrite(grnLED, HIGH);  //turn on green LED
-  digitalWrite(ylwLED, HIGH);  //turn on yellow LED
-
-  int leftSpd = 1000;  //right motor speed
-  int rightSpd = 200;  //left motor speed
-
-  stepperLeft.setSpeed(leftSpd);    //set left motor speed
-  stepperRight.setSpeed(rightSpd);  //set right motor speed
-
-  while (true) {
-    runAtSpeed();
-  }
-}
-
-
-/*this function will move to target at 2 different speeds - relative position*/
-void move6() {
-
-  Serial.println("move6 function");
-  int leftPos = 5000;//right motor absolute position
-  int rightPos = 1000;//left motor absolute position
-  int leftSpd = 1000;//right motor speed
-  int rightSpd = 200; //left motor speed
-
-  digitalWrite(redLED, HIGH);  //turn on red LED
-  digitalWrite(grnLED, HIGH);  //turn on green LED
-  digitalWrite(ylwLED, HIGH);  //turn off yellow LED
-
-  //Unomment the next 2 lines for relative movement
-  stepperLeft.move(leftPos);    //move left wheel to relative position
-  stepperRight.move(rightPos);  //move right wheel to relative position
-
-  stepperLeft.setSpeed(leftSpd);    //set left motor speed
-  stepperRight.setSpeed(rightSpd);  //set right motor speed
-
-  steppers.runSpeedToPosition();  // Blocks until all are in position
-}
-
 /*this function will reset the encoders*/
 void resetEncoder() {
   encoder[LEFT] = 0;   //clear the left encoder data buffer
@@ -404,8 +237,6 @@ void stopSteppers() {
   and sets the wheel speeds accordingly. The steppers are then run to the computed positions.
   If the error is within a specified threshold, the function stops the steppers.
 */
-
-
 void PIDControl(int leftDistance, int rightDistance) {
   // Calculate the error between the target and actual encoder values
   long leftDistanceError = abs(leftDistance) - encoder[LEFT]*encoderRatio;
@@ -730,27 +561,28 @@ void setup() {
 
 void loop() {
   //uncomment each function one at a time to see what the code does
-  // move1();//call move back and forth function
-  // move2();//call move back and forth function with AccelStepper library functions
-  // move3();//call move back and forth function with MultiStepper library functions
-  // move4(); //move to target position with 2 different speeds - absolute position
-  // move5(); //move continuously with 2 different speeds
-  // move6(); //move to target position with 2 different speeds - relative position
-
   // forward(24.0, defaultStepSpeed);
+  // delay(1000);
   // reverse(24.0, defaultStepSpeed);
+  // delay(1000);
   // pivot(TO_LEFT, 90.0, defaultStepSpeed);
+  // delay(1000);
   // pivot(TO_RIGHT, 90.0, defaultStepSpeed);
+  // delay(1000);
   // spin(TO_LEFT, 90.0, defaultStepSpeed);
+  // delay(1000);
   // spin(TO_RIGHT, 90.0, defaultStepSpeed);
+  // delay(1000);
 
   // moveCircle(24.0, COUNTERCLOCKWISE, defaultStepSpeed);
+  // delay(1000);
   // moveFigure8(24.0);
+  // delay(1000);
   // moveSquare(36.0);
+  // delay(1000);
 
   // goToGoal(24.0, 24.0);
   // goToGoal(-36.0, -48.0);
-  
 
   //Uncomment to read Encoder Data (uncomment to read on serial monitor)
   // print_encoder_data();   //prints encoder data

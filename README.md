@@ -17,6 +17,8 @@
 ### Prelab
 [ECE425 Lab2 PesudoCode - Google Docs](https://docs.google.com/document/d/1snCNbrsLWSU_QRfAEzV5mj06PNI3PiRjsJTKSI4klKo/edit?usp=sharing)
 
+[ECE425 LAB2.vsdx](https://rosehulman-my.sharepoint.com/:u:/g/personal/biz_rose-hulman_edu/ESsYjYtg8r1Fg89Q9WoDicIBrh7kv3_lGZGYDi6TSPU6tA?e=VbczBs)
+
 
 
 ### Lab worksheet
