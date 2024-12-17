@@ -7,7 +7,7 @@
   The motions will be go to angle, go to goal, move in a circle, square, figure eight and teleoperation (stop, forward, spin, reverse, turn)
   It will also include wireless commmunication for remote control of the robot by using a game controller or serial monitor.
   The primary functions created are
-  moveCircle - given the diameter in inches and direction of clockwise or counterclockwise, move the robot in a circle with that diameter
+  moveCircle - given the diameter in inches, direction of clockwise or counterclockwise, the speed of the robot, move the robot in a circle with that diameter
   moveFigure8 - given the diameter in inches, use the moveCircle() function with direction input to create a Figure 8
   forward, reverse - both wheels move with same velocity, same direction
   pivot- one wheel stationary, one wheel moves forward or back, given the direction of to left or to right, the pivot angle in degrees, and speed in steps per second
@@ -580,14 +580,13 @@ void reverse(double distance, int speed) {
  * and the robot's width, adjusting for clockwise or counterclockwise movement.
  * @param diam the diameter of the circle in inches
  * @param dir the direction of the circle (CLOCKWISE or COUNTERCLOCKWISE)
+ * @param speed the speed of the circle in steps per second
  */
 
-void moveCircle(double diam, int dir) {
+void moveCircle(double diam, int dir, int speed) {
   if (dir != CLOCKWISE && dir != COUNTERCLOCKWISE && diam <= robotWidth) return;
   Serial.println("moveCircle function");
   digitalWrite(redLED, HIGH);  //turn on red LED
-
-  int speed = defaultStepSpeed;
 
   // Calculate the move position and speed for each wheel
   double stepperInnerMoveLength = pi * (diam - robotWidth);
@@ -629,9 +628,9 @@ void moveFigure8(double diam) {
   digitalWrite(grnLED, LOW);   //turn off green LED
   digitalWrite(ylwLED, HIGH);  //turn on yellow LED
 
-  moveCircle(diam, COUNTERCLOCKWISE);
+  moveCircle(diam, COUNTERCLOCKWISE, defaultStepSpeed);
   delay(500);
-  moveCircle(diam, CLOCKWISE);
+  moveCircle(diam, CLOCKWISE, defaultStepSpeed);
 }
 
 /**
@@ -745,7 +744,7 @@ void loop() {
   // spin(TO_LEFT, 90.0, defaultStepSpeed);
   // spin(TO_RIGHT, 90.0, defaultStepSpeed);
 
-  // moveCircle(24.0, COUNTERCLOCKWISE);
+  // moveCircle(24.0, COUNTERCLOCKWISE, defaultStepSpeed);
   // moveFigure8(24.0);
   // moveSquare(36.0);
 
