@@ -55,6 +55,39 @@
 #include <MultiStepper.h>  //include multiple stepper motor library
 #include <math.h>
 
+/**
+// Can be included as many times as necessary, without `Multiple Definitions` Linker Error
+#include "Portenta_H7_TimerInterrupt.h"
+
+// To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
+#include "Portenta_H7_ISR_Timer.h"
+
+// Timer
+// These define's must be placed at the beginning before #include "Portenta_H7_TimerInterrupt.h"
+// _TIMERINTERRUPT_LOGLEVEL_ from 0 to 4
+// Don't define _TIMERINTERRUPT_LOGLEVEL_ > 0. Only for special ISR debugging only. Can hang the system.
+#define _TIMERINTERRUPT_LOGLEVEL_     4
+
+// Timer
+#define TIMER_INTERVAL_MS         100
+#define HW_TIMER_INTERVAL_MS      50
+
+#define TIMER_INTERVAL_0_5S           500L
+
+// Init timer TIM12
+Portenta_H7_Timer ITimer(TIM12);
+
+// Init Portenta_H7_ISR_Timer
+// Each Portenta_H7_ISR_Timer can service 16 different ISR-based timers
+Portenta_H7_ISR_Timer ISR_Timer;
+
+void TimerHandler()
+{
+  ISR_Timer.run();
+}
+
+*/
+
 //state LEDs connections
 #define redLED 5            //red LED for displaying states
 #define grnLED 6            //green LED for displaying states
@@ -109,6 +142,29 @@ const int PIDkp = 1;                    //PID proportional gain
 const int encoderRatio = 20;            //ratio between the encoder ticks and steps
 
 
+// random move maximum values
+const int maxTurnAngle = 90; // Maximum turn angle in degrees
+const int maxDistanceMove = 12.0; // Maximum move distance in inches
+
+// lidar constant values
+#define FRONT 0
+#define BANK 1
+#define LEFT 2
+#define RIGHT 3
+#define numOfSens 4
+
+uint16_t wait = 100;
+int16_t ft_lidar = 8;
+int16_t bk_lidar = 9;
+int16_t lt_lidar = 10;
+int16_t rt_lidar = 11;
+int16_t lidar_pins[4] = {8,9,10,11 };
+
+
+
+
+
+
 //interrupt function to count left encoder tickes
 void LwheelSpeed() {
   encoder[LEFT]++;  //count the left wheel encoder interrupts
@@ -117,6 +173,12 @@ void LwheelSpeed() {
 //interrupt function to count right encoder ticks
 void RwheelSpeed() {
   encoder[RIGHT]++;  //count the right wheel encoder interrupts
+}
+
+void allOFF() {
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(leds[i], LOW);
+  }
 }
 
 //function to set all stepper motor variables, outputs and LEDs
@@ -235,30 +297,6 @@ int length2Steps(double length) {
 
 
 /**
- * Pivots the robot about its center by rotating one wheel and keeping the other stationary.
- * @param direction the direction of the pivot (TO_LEFT or TO_RIGHT)
- * @param angle the angle of the pivot in degrees
- * @param speed the speed of the pivot in steps per second
- */
-void pivot(int direction, double angle, int speed) {
-  if (direction != TO_LEFT && direction != TO_RIGHT && angle < 0) return;
-
-  // calculate the turn length, using the circle formula
-  double stepperMoveLength = 2 * pi * robotWidth * angle / 360;
-  int stepperMovePos = length2Steps(stepperMoveLength);
-
-  if (direction == TO_RIGHT) {
-    stepperLeft.move(stepperMovePos);
-    stepperLeft.setSpeed(speed);  //set left motor speed
-  } else if (direction == TO_LEFT) {
-    stepperRight.move(stepperMovePos);
-    stepperRight.setSpeed(speed);  //set right motor speed
-  }
-  steppers.runSpeedToPosition();
-}
-
-
-/**
  * Spins the robot about its center by rotating both wheels in opposite directions.
  * @param direction the direction of the spin (TO_LEFT or TO_RIGHT)
  * @param angle the angle of the spin in degrees
@@ -299,38 +337,6 @@ void spin(int direction, double angle, int speed) {
 
 
 /**
- * Turns the robot by moving each wheel a different distance at a different speed.
- * @param direction the direction of the turn (TO_LEFT or TO_RIGHT)
- * @param timeDelay the time in seconds to move each wheel
- * @param velocityDiff the difference in speed between the two wheels
- */
-void turn(int direction, double timeDelay, int velocityDiff) {
-  if (direction != TO_LEFT && direction != TO_RIGHT) return;
-  int speedLow = 500;
-  int speedHigh = speedLow + velocityDiff;
-  
-  // calculate the distance for each wheel
-  int distanceShort = round(speedLow * timeDelay);
-  int distanceLong = round(speedHigh * timeDelay);
-
-
-  if (direction == TO_RIGHT) {
-    stepperLeft.move(distanceLong);
-    stepperLeft.setSpeed(speedHigh);  //set left motor speed
-    stepperRight.move(distanceShort);
-    stepperRight.setSpeed(speedLow);  //set right motor speed
-  } else if (direction == TO_LEFT) {
-    stepperLeft.move(distanceShort);
-    stepperLeft.setSpeed(speedLow);  //set left motor speed
-    stepperRight.move(distanceLong);
-    stepperRight.setSpeed(speedHigh);  //set right motor speed
-  }
-
-  steppers.runSpeedToPosition();
-}
-
-
-/**
  * Moves the robot forward by a specified distance at a specified speed.
  * @param distance the distance in inches to move the robot
  * @param speed the speed in steps per second to move the robot
@@ -362,93 +368,6 @@ void reverse(double distance, int speed) {
   forward(-distance, -speed);
 }
 
-
-/**
- * Moves the robot in a circular path with a specified diameter and direction.
- * Turns on the red LED during the movement.
- * Calculates the move position and speed for each wheel based on the diameter
- * and the robot's width, adjusting for clockwise or counterclockwise movement.
- * @param diam the diameter of the circle in inches
- * @param dir the direction of the circle (CLOCKWISE or COUNTERCLOCKWISE)
- * @param speed the speed of the circle in steps per second
- */
-
-void moveCircle(double diam, int dir, int speed) {
-  if (dir != CLOCKWISE && dir != COUNTERCLOCKWISE && diam <= robotWidth) return;
-  Serial.println("moveCircle function");
-  digitalWrite(redLED, HIGH);  //turn on red LED
-
-  // Calculate the move position and speed for each wheel
-  double stepperInnerMoveLength = pi * (diam - robotWidth);
-  int stepperInnerMovePos = length2Steps(stepperInnerMoveLength);
-
-  double stepperOuterMoveLength = pi * (diam + robotWidth);
-  int stepperOuterMovePos = length2Steps(stepperOuterMoveLength);
-
-  // Calculate the speed for each wheel
-  int innerSpeed = round(speed * (diam / 2 - robotWidth / 2) / (robotWidth / 2 + diam / 2));
-  int outerSpeed = speed;
-
-  if (dir == CLOCKWISE) {
-    stepperLeft.move(stepperOuterMovePos);
-    stepperLeft.setSpeed(outerSpeed);
-
-    stepperRight.move(stepperInnerMovePos);
-    stepperRight.setSpeed(innerSpeed);
-  } else if (dir == COUNTERCLOCKWISE) {
-    stepperLeft.move(stepperInnerMovePos);
-    stepperLeft.setSpeed(innerSpeed);
-
-    stepperRight.move(stepperOuterMovePos);
-    stepperRight.setSpeed(outerSpeed);
-  }
-
-
-  steppers.runSpeedToPosition();
-}
-
-
-/**
- * Moves the robot in a figure-eight pattern, with the specified diameter.
- * @param diam the diameter of the figure-eight in inches
- */
-void moveFigure8(double diam) {
-  Serial.println("moveFigure8 function");
-  digitalWrite(redLED, HIGH);  //turn on red LED
-  digitalWrite(grnLED, LOW);   //turn off green LED
-  digitalWrite(ylwLED, HIGH);  //turn on yellow LED
-
-  moveCircle(diam, COUNTERCLOCKWISE, defaultStepSpeed);
-  delay(500);
-  moveCircle(diam, CLOCKWISE, defaultStepSpeed);
-}
-
-/**
- * Moves the robot in a square pattern with the specified side length.
- * @param distance the length of one side of the square in inches
- */
-void moveSquare(double distance) {
-  Serial.println("moveSquare function");
-  digitalWrite(redLED, HIGH);   //turn on red LED
-  digitalWrite(grnLED, HIGH);  //turn on green LED
-  digitalWrite(ylwLED, HIGH);  //turn on yellow LED
-  forward(distance, defaultStepSpeed);
-  delay(500);
-  goToAngle(-90);
-  delay(500);
-  forward(distance, defaultStepSpeed);
-  delay(500);
-  goToAngle(-90);
-  delay(500);
-  forward(distance, defaultStepSpeed);
-  delay(500);
-  goToAngle(-90);
-  delay(500);
-  forward(distance, defaultStepSpeed);
-  delay(500);
-  goToAngle(-90);
-  delay(500);
-}
 
 /**
  * Turns the robot to the absolute angle specified.
@@ -504,14 +423,86 @@ void goToGoal(double x, double y) {
 }
 
 
+void randomWander(){
+  digitalWrite(grnLED, HIGH);  //turn on green LED
+  
+  int randAngle = random(-maxTurnAngle, maxTurnAngle);
+  int randDistance = random(maxDistanceMove);
+  
+  goToAngle(randAngle);
+  forward(randDistance, defaultStepSpeed);
+
+  // Serial.print("Random Values:\n\tAngle: ");
+  // Serial.print(randAngle);
+  // Serial.print("\tDistance: ");
+  // Serial.println(randDistance);
+}
+
+void init_lidar(){
+  for (int i = 0; i<numOfSens;i++){
+    pinMode(lidar_pins[i], OUTPUT);
+  }
+}
+
+//thie function will read the left or right sensor based upon input value
+int readLidar(uint16_t side) {
+  int16_t t = lidar_pins[side];
+  int d; //distance to  object
+  if (t == 0){
+    // pulseIn() did not detect the start of a pulse within 1 second.
+    //Serial.println("timeout");
+    d = 100000; //no object detected
+  }
+  else if (t > 1850)  {
+    //Serial.println("timeout");
+    d = 100000; //no object detected
+  }
+  else  {
+    // Valid pulse width reading. Convert pulse width in microseconds to distance in millimeters.
+    d = (t - 1000) * 3 / 40;
+ 
+    // Limit minimum distance to 0.
+    if (d < 0) { d = 0; } 
+  }
+  //   Serial.print(d);
+  // Serial.print(" cm, ");
+  return d;
+}
+
+void avoidObstacle(){
+  Serial.println(F("Obstacle Check"));
+  // int distance = 0;
+  // for (int i = 0; i<numOfSens;i++){
+  //   distance = readLidar(i);
+  //   if(distance <= 10){
+  //     stopSteppers();
+  //     return;
+  //   }
+  // }
+  for (int i = 0;i<4;i++){
+    Serial.print(i);
+    Serial.print(": ");
+    Serial.print(readLidar(i));
+    Serial.print(" ");
+  }
+  Serial.println();
+
+}
+
+
 // MAIN
 void setup() {
   int baudrate = 9600;  //serial monitor baud rate'
   init_stepper();       //set up stepper motor
-
+  init_lidar();         //set up lidars
+  
   attachInterrupt(digitalPinToInterrupt(ltEncoder), LwheelSpeed, CHANGE);  //init the interrupt mode for the left encoder
   attachInterrupt(digitalPinToInterrupt(rtEncoder), RwheelSpeed, CHANGE);  //init the interrupt mode for the right encoder
-
+  
+  // ITimer.attachInterruptInterval(HW_TIMER_INTERVAL_MS * 1000, TimerHandler); // Interval in microsecs
+  // ISR_Timer.setInterval(TIMER_INTERVAL_0_5S,  avoidObstacle); // Timer for avoid obstacles
+  
+  randomSeed(analogRead(0)); //generate a new random number each time called
 
   Serial.begin(baudrate);  //start serial monitor communication
   Serial.println("Robot starting...Put ON TEST STAND");
@@ -524,20 +515,9 @@ void loop() {
   // delay(1000);
   // reverse(24.0, defaultStepSpeed);
   // delay(1000);
-  // pivot(TO_LEFT, 90.0, defaultStepSpeed);
-  // delay(1000);
-  // pivot(TO_RIGHT, 90.0, defaultStepSpeed);
-  // delay(1000);
   // spin(TO_LEFT, 90.0, defaultStepSpeed);
   // delay(1000);
   // spin(TO_RIGHT, 90.0, defaultStepSpeed);
-  // delay(1000);
-
-  // moveCircle(24.0, COUNTERCLOCKWISE, defaultStepSpeed);
-  // delay(1000);
-  // moveFigure8(24.0);
-  // delay(1000);
-  // moveSquare(36.0);
   // delay(1000);
 
   // goToGoal(24.0, 24.0);
@@ -545,6 +525,8 @@ void loop() {
 
   //Uncomment to read Encoder Data (uncomment to read on serial monitor)
   // print_encoder_data();   //prints encoder data
+
+  // randomWander();
 
   delay(wait_time);  //wait to move robot or read data
 }
