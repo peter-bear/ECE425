@@ -273,8 +273,12 @@ void resetEncoder() {
 
 /*this function will stop the steppers*/
 void stopMove() {
-  stepperRight.stop();
-  stepperLeft.stop();
+  stepperRight.stop();  // Stop right motor
+  stepperLeft.stop();   // Stop left motor
+  stepperRight.setSpeed(0);  // Set speed to 0
+  stepperLeft.setSpeed(0);   // Set speed to 0
+  stepperRight.runSpeed();   // Update motor state
+  stepperLeft.runSpeed();    // Update motor state
 }
 
 /*
@@ -472,11 +476,21 @@ void randomWander() {
 
 // reads a lidar given a pin
 int read_lidar(int pin) {
-  // pinMode(pin, OUTPUT);
+  pinMode(pin, INPUT);  // Ensure pin is in INPUT mode
+  
+  // Wait for pulse
+  int16_t t = pulseIn(pin, HIGH, 2000); // 2000us timeout
+  
+  // Convert pulse width to distance (cm)
   int d;
-  int16_t t = pulseIn(pin, HIGH);
-  d = (t - 1000) * 3 / 40;
-  if (t == 0 || t > 1850 || d < 0) { d = 0; }
+  if (t == 0 || t > 1850) {
+    d = 0;  // Invalid reading
+  } else {
+    d = (t - 1000) * 3 / 40;  // Convert to cm
+    if (d < 0) d = 0;  // Sanity check
+  }
+  
+  delayMicroseconds(50);  // Small delay between readings
   return d;
 }
 
@@ -515,16 +529,36 @@ void print_sensor_data(struct lidar data, struct sonar data2) {
 }
 
 void aggressiveKidBehavior() {
-  digitalWrite(redLED, HIGH);  //turn on red LED
-  stepperLeft.setSpeed(defaultStepSpeed);                                  //set left motor speed
-  stepperRight.setSpeed(defaultStepSpeed);   
-  while (!isCloseObstacle()) {
-    while (stepperRight.runSpeed() || stepperLeft.runSpeed()) {
+  digitalWrite(redLED, LOW);  // Initially LED is off
+  
+  // Set initial movement speeds
+  stepperLeft.setSpeed(defaultStepSpeed);  
+  stepperRight.setSpeed(defaultStepSpeed);
+
+  while (true) {
+    if (isCloseObstacle()) {
+      // Obstacle detected - stop motors and turn on LED
+      digitalWrite(redLED, HIGH);
+      stopMove();
+      
+      // Wait while obstacle remains
+      while (isCloseObstacle()) {
+        delay(50);  // Small delay to prevent CPU hogging
+      }
+      
+      // Obstacle removed - reset movement
+      digitalWrite(redLED, LOW);
+      stepperLeft.setSpeed(defaultStepSpeed);
+      stepperRight.setSpeed(defaultStepSpeed);
     }
+    
+    // Move the steppers one step at a time
+    stepperLeft.runSpeed();
+    stepperRight.runSpeed();
+    
+    // Small delay to allow sensor readings to be processed
+    delay(1);
   }
-  digitalWrite(redLED, LOW);  //turn off red LED
-  stopMove();
-  delay(200);
 }
 
 void setupM7() {
@@ -537,15 +571,24 @@ void setupM7() {
   delay(1000);
 }
 
-bool isCloseObstacle(){
-  // read lidar data from struct
-  struct lidar lidarData = RPC.call("read_lidars").as<struct lidar>();
-  struct sonar sonarData = RPC.call("read_sonars").as<struct sonar>();
-  // print_sensor_data(lidarData, sonarData);
-  return lidarData.front < 10 && lidarData.front != 0;
+bool isCloseObstacle() {
+  // Read sensor data
+  struct lidar lidar_data = RPC.call("read_lidars").as<struct lidar>();
+  struct sonar sonar_data = RPC.call("read_sonars").as<struct sonar>();
+  
+  // Print sensor data for debugging
+  print_sensor_data(lidar_data, sonar_data);
+  
+  // Check for obstacles - adjust these thresholds based on your needs
+  const int OBSTACLE_THRESHOLD = 10; // centimeters
+  
+  // Return true if any sensor detects a close obstacle
+  return (lidar_data.front < OBSTACLE_THRESHOLD && lidar_data.front != 0) ||
+         (sonar_data.right < OBSTACLE_THRESHOLD && sonar_data.right != 0) ||
+         (sonar_data.left < OBSTACLE_THRESHOLD && sonar_data.left != 0);
 }
-
 void loopM7() {
+
   aggressiveKidBehavior();
 }
 
@@ -556,15 +599,28 @@ void setupM4() {
 }
 
 void loopM4() {
-  // update the struct with current lidar data
+  // Add delays between readings to allow sensor to stabilize
   lidarData.front = read_lidar(ft_lidar);
+  delay(20);
   lidarData.back = read_lidar(bk_lidar);
+  delay(20);
   lidarData.left = read_lidar(lt_lidar);
+  delay(20);
   lidarData.right = read_lidar(rt_lidar);
+  delay(20);
+  
   sonarData.right = read_sonar(leftSnr);
+  delay(20);
   sonarData.left = read_sonar(rightSnr);
+  delay(20);
+  
+  // Debug print
+  // Serial.println("Lidar Readings:");
+  // Serial.print("Front: "); Serial.println(lidarData.front);
+  // Serial.print("Back: "); Serial.println(lidarData.back);
+  // Serial.print("Left: "); Serial.println(lidarData.left);
+  // Serial.print("Right: "); Serial.println(lidarData.right);
 }
-
 
 
 // MAIN
