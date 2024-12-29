@@ -344,7 +344,7 @@ void move5() {
   digitalWrite(ylwLED, HIGH);//turn on yellow LED
 
   int leftSpd = 1000;//right motor speed
-  int rightSpd = 200; //left motor speed
+  int rightSpd = 1000; //left motor speed
 
   stepperLeft.setSpeed(leftSpd);//set left motor speed
   stepperRight.setSpeed(rightSpd);//set right motor speed
@@ -456,8 +456,8 @@ void loop()
   // move2();//call move back and forth function with AccelStepper library functions
   // move3();//call move back and forth function with MultiStepper library functions
   // move4(); //move to target position with 2 different speeds - absolute position
-  // move5(); //move continuously with 2 different speeds
-  move6(); //move to target position with 2 different speeds - relative position
+  move5(); //move continuously with 2 different speeds
+  // move6(); //move to target position with 2 different speeds - relative position
 
   //Uncomment to read Encoder Data (uncomment to read on serial monitor)
   print_encoder_data();   //prints encoder data

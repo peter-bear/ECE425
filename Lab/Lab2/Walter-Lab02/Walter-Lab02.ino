@@ -54,6 +54,7 @@
 #include <AccelStepper.h>  //include the stepper motor library
 #include <MultiStepper.h>  //include multiple stepper motor library
 #include <math.h>
+#include "RPC.h"
 
 /**
 // Can be included as many times as necessary, without `Multiple Definitions` Linker Error
@@ -124,27 +125,27 @@ volatile long encoder[2] = { 0, 0 };  //interrupt variable to hold number of enc
 int lastSpeed[2] = { 0, 0 };          //variable to hold encoder speed (left, right)
 int accumTicks[2] = { 0, 0 };         //variable to hold accumulated ticks since last reset
 
-#define TO_LEFT -1                    // direction variables to left
-#define TO_RIGHT 1                    // direction variables to right
+#define TO_LEFT -1  // direction variables to left
+#define TO_RIGHT 1  // direction variables to right
 
-#define CLOCKWISE 1                    //direction variables for clockwise motion
-#define COUNTERCLOCKWISE -1           //direction variables for counterclockwise motion
+#define CLOCKWISE 1          //direction variables for clockwise motion
+#define COUNTERCLOCKWISE -1  //direction variables for counterclockwise motion
 
 // Helper Functions
-const float pi = 3.14159;               //pi
-const float wheelRadius = 1.7;          //robot wheel radius in inches
-const int stepsPerRevol = 800;          //robot wheel steps per revolution
-const float robotWidth = 9.0;           //robot width in inches
-const int defaultStepSpeed = 400;       //robot default speed in steps per second
+const float pi = 3.14159;          //pi
+const float wheelRadius = 1.7;     //robot wheel radius in inches
+const int stepsPerRevol = 800;     //robot wheel steps per revolution
+const float robotWidth = 9.0;      //robot width in inches
+const int defaultStepSpeed = 400;  //robot default speed in steps per second
 
-const int PIDThreshold = 50;            //PID threshold
-const int PIDkp = 1;                    //PID proportional gain
-const int encoderRatio = 20;            //ratio between the encoder ticks and steps
+const int PIDThreshold = 50;  //PID threshold
+const int PIDkp = 1;          //PID proportional gain
+const int encoderRatio = 20;  //ratio between the encoder ticks and steps
 
 
 // random move maximum values
-const int maxTurnAngle = 90; // Maximum turn angle in degrees
-const int maxDistanceMove = 12.0; // Maximum move distance in inches
+const int maxTurnAngle = 90;       // Maximum turn angle in degrees
+const int maxDistanceMove = 12.0;  // Maximum move distance in inches
 
 // lidar constant values
 #define FRONT 0
@@ -158,12 +159,40 @@ int16_t ft_lidar = 8;
 int16_t bk_lidar = 9;
 int16_t lt_lidar = 10;
 int16_t rt_lidar = 11;
-int16_t lidar_pins[4] = {8,9,10,11 };
+
+int16_t lidar_pins[4] = { 8, 9, 10, 11 };
+
+int16_t leftSnr = 3;
+int16_t rightSnr = 4;
+
+// a struct to hold lidar data
+struct lidar {
+  // this can easily be extended to contain sonar data as well
+  int front;
+  int back;
+  int left;
+  int right;
+  // this defines some helper functions that allow RPC to send our struct (I found this on a random forum)
+  MSGPACK_DEFINE_ARRAY(front, back, left, right);  //https://stackoverflow.com/questions/37322145/msgpack-to-pack-structures https://www.appsloveworld.com/cplus/100/391/msgpack-to-pack-structures
+} lidarData;
 
 
+struct lidar read_lidars() {
+  return lidarData;
+}
 
+// a struct to hold sonar data
+struct sonar {
+  // this can easily be extended to contain sonar data as well
+  int left;
+  int right;
+  // this defines some helper functions that allow RPC to send our struct (I found this on a random forum)
+  MSGPACK_DEFINE_ARRAY(left, right);  //https://stackoverflow.com/questions/37322145/msgpack-to-pack-structures https://www.appsloveworld.com/cplus/100/391/msgpack-to-pack-structures
+} sonarData;
 
-
+struct sonar read_sonars() {
+  return sonarData;
+}
 
 //interrupt function to count left encoder tickes
 void LwheelSpeed() {
@@ -243,7 +272,7 @@ void resetEncoder() {
 }
 
 /*this function will stop the steppers*/
-void stopSteppers() {
+void stopMove() {
   stepperRight.stop();
   stepperLeft.stop();
 }
@@ -260,8 +289,8 @@ void stopSteppers() {
 */
 void PIDControl(int leftDistance, int rightDistance) {
   // Calculate the error between the target and actual encoder values
-  long leftDistanceError = abs(leftDistance) - encoder[LEFT]*encoderRatio;
-  long rightDistanceError = abs(rightDistance) - encoder[RIGHT]*encoderRatio;
+  long leftDistanceError = abs(leftDistance) - encoder[LEFT] * encoderRatio;
+  long rightDistanceError = abs(rightDistance) - encoder[RIGHT] * encoderRatio;
 
   // Apply proportional control
   if (abs(leftDistanceError) > PIDThreshold || abs(rightDistanceError) > PIDThreshold) {
@@ -270,19 +299,19 @@ void PIDControl(int leftDistance, int rightDistance) {
 
 
     // Set the wheel speeds
-    if(leftDistanceError<0){
+    if (leftDistanceError < 0) {
       stepperLeft.setSpeed(-stepperLeft.speed());
     }
-    if(rightDistanceError<0){
+    if (rightDistanceError < 0) {
       stepperRight.setSpeed(-stepperRight.speed());
     }
-    
+
     // Run the steppers
     stepperLeft.move(outputLeft);
     stepperRight.move(outputRight);
     steppers.runSpeedToPosition();
   }
-  stopSteppers();
+  stopMove();
 }
 
 /**
@@ -422,111 +451,139 @@ void goToGoal(double x, double y) {
   forward(distance, defaultStepSpeed);
 }
 
+void printRandomValues(int randAngle, int randDistance) {
+  Serial.print("Random Values:\n\tAngle: ");
+  Serial.print(randAngle);
+  Serial.print("\tDistance: ");
+  Serial.println(randDistance);
+}
 
-void randomWander(){
+void randomWander() {
   digitalWrite(grnLED, HIGH);  //turn on green LED
-  
+
   int randAngle = random(-maxTurnAngle, maxTurnAngle);
   int randDistance = random(maxDistanceMove);
-  
+
   goToAngle(randAngle);
   forward(randDistance, defaultStepSpeed);
 
-  // Serial.print("Random Values:\n\tAngle: ");
-  // Serial.print(randAngle);
-  // Serial.print("\tDistance: ");
-  // Serial.println(randDistance);
+  // printRandomValues(randAngle, randDistance);
 }
 
-void init_lidar(){
-  for (int i = 0; i<numOfSens;i++){
-    pinMode(lidar_pins[i], OUTPUT);
-  }
-}
-
-//thie function will read the left or right sensor based upon input value
-int readLidar(uint16_t side) {
-  int16_t t = lidar_pins[side];
-  int d; //distance to  object
-  if (t == 0){
-    // pulseIn() did not detect the start of a pulse within 1 second.
-    //Serial.println("timeout");
-    d = 100000; //no object detected
-  }
-  else if (t > 1850)  {
-    //Serial.println("timeout");
-    d = 100000; //no object detected
-  }
-  else  {
-    // Valid pulse width reading. Convert pulse width in microseconds to distance in millimeters.
-    d = (t - 1000) * 3 / 40;
- 
-    // Limit minimum distance to 0.
-    if (d < 0) { d = 0; } 
-  }
-  //   Serial.print(d);
-  // Serial.print(" cm, ");
+// reads a lidar given a pin
+int read_lidar(int pin) {
+  // pinMode(pin, OUTPUT);
+  int d;
+  int16_t t = pulseIn(pin, HIGH);
+  d = (t - 1000) * 3 / 40;
+  if (t == 0 || t > 1850 || d < 0) { d = 0; }
   return d;
 }
 
-void avoidObstacle(){
-  Serial.println(F("Obstacle Check"));
-  // int distance = 0;
-  // for (int i = 0; i<numOfSens;i++){
-  //   distance = readLidar(i);
-  //   if(distance <= 10){
-  //     stopSteppers();
-  //     return;
-  //   }
-  // }
-  for (int i = 0;i<4;i++){
-    Serial.print(i);
-    Serial.print(": ");
-    Serial.print(readLidar(i));
-    Serial.print(" ");
-  }
-  Serial.println();
+// reads a sonar given a pin
+int read_sonar(int pin) {
+  float velocity((331.5 + 0.6 * (float)(20)) * 100 / 1000000.0);
+  uint16_t distance, pulseWidthUs;
 
+  pinMode(pin, OUTPUT);
+  digitalWrite(pin, LOW);
+  digitalWrite(pin, HIGH);            //Set the trig pin High
+  delayMicroseconds(10);              //Delay of 10 microseconds
+  digitalWrite(pin, LOW);             //Set the trig pin Low
+  pinMode(pin, INPUT);                //Set the pin to input mode
+  pulseWidthUs = pulseIn(pin, HIGH);  //Detect the high level time on the echo pin, the output high level time represents the ultrasonic flight time (unit: us)
+  distance = pulseWidthUs * velocity / 2.0;
+  if (distance < 0 || distance > 50) { distance = 0; }
+  return distance;
 }
+
+void print_sensor_data(struct lidar data, struct sonar data2) {
+  Serial.print("lidar: ");
+  Serial.print(data.front);
+  Serial.print(", ");
+  Serial.print(data.back);
+  Serial.print(", ");
+  Serial.print(data.left);
+  Serial.print(", ");
+  Serial.print(data.right);
+  Serial.println();
+  Serial.print("sonar: ");
+  Serial.print(data2.left);
+  Serial.print(", ");
+  Serial.print(data2.right);
+  Serial.println();
+}
+
+void aggressiveKidBehavior() {
+  digitalWrite(redLED, HIGH);  //turn on red LED
+  stepperLeft.setSpeed(defaultStepSpeed);                                  //set left motor speed
+  stepperRight.setSpeed(defaultStepSpeed);   
+  while (!isCloseObstacle()) {
+    while (stepperRight.runSpeed() || stepperLeft.runSpeed()) {
+    }
+  }
+  digitalWrite(redLED, LOW);  //turn off red LED
+  stopMove();
+  delay(200);
+}
+
+void setupM7() {
+  init_stepper();  //set up stepper motor
+  for (int i = 0; i < numOfSens; i++) {
+    pinMode(lidar_pins[i], OUTPUT);
+  }                              //set right motor speed
+  attachInterrupt(digitalPinToInterrupt(ltEncoder), LwheelSpeed, CHANGE);  //init the interrupt mode for the left encoder
+  attachInterrupt(digitalPinToInterrupt(rtEncoder), RwheelSpeed, CHANGE);  //init the interrupt mode for the right encoder
+  delay(1000);
+}
+
+bool isCloseObstacle(){
+  // read lidar data from struct
+  struct lidar lidarData = RPC.call("read_lidars").as<struct lidar>();
+  struct sonar sonarData = RPC.call("read_sonars").as<struct sonar>();
+  // print_sensor_data(lidarData, sonarData);
+  return lidarData.front < 10 && lidarData.front != 0;
+}
+
+void loopM7() {
+  aggressiveKidBehavior();
+}
+
+//set up the M4 to be the server for the sensors data
+void setupM4() {
+  RPC.bind("read_lidars", read_lidars);  // bind a method to return the lidar data all at once
+  RPC.bind("read_sonars", read_sonars);  // bind a method to return the lidar data all at once
+}
+
+void loopM4() {
+  // update the struct with current lidar data
+  lidarData.front = read_lidar(ft_lidar);
+  lidarData.back = read_lidar(bk_lidar);
+  lidarData.left = read_lidar(lt_lidar);
+  lidarData.right = read_lidar(rt_lidar);
+  sonarData.right = read_sonar(leftSnr);
+  sonarData.left = read_sonar(rightSnr);
+}
+
 
 
 // MAIN
 void setup() {
-  int baudrate = 9600;  //serial monitor baud rate'
-  init_stepper();       //set up stepper motor
-  init_lidar();         //set up lidars
-  
-  attachInterrupt(digitalPinToInterrupt(ltEncoder), LwheelSpeed, CHANGE);  //init the interrupt mode for the left encoder
-  attachInterrupt(digitalPinToInterrupt(rtEncoder), RwheelSpeed, CHANGE);  //init the interrupt mode for the right encoder
-  
-  // ITimer.attachInterruptInterval(HW_TIMER_INTERVAL_MS * 1000, TimerHandler); // Interval in microsecs
-  // ISR_Timer.setInterval(TIMER_INTERVAL_0_5S,  avoidObstacle); // Timer for avoid obstacles
-  
-  randomSeed(analogRead(0)); //generate a new random number each time called
-
-  Serial.begin(baudrate);  //start serial monitor communication
+  int baudrate = 9600;        //serial monitor baud rate'
+  randomSeed(analogRead(0));  //generate a new random number each time called
+  Serial.begin(baudrate);     //start serial monitor communication
   Serial.println("Robot starting...Put ON TEST STAND");
-  delay(pauseTime);  //always wait 2.5 seconds before the robot moves
+
+  RPC.begin();
+  if (HAL_GetCurrentCPUID() == CM7_CPUID) {
+    // if on M7 CPU, run M7 setup & loop
+    setupM7();
+    while (1) loopM7();
+  } else {
+    // if on M4 CPU, run M7 setup & loop
+    setupM4();
+    while (1) loopM4();
+  }
 }
 
-void loop() {
-  //uncomment each function one at a time to see what the code does
-  // forward(24.0, defaultStepSpeed);
-  // delay(1000);
-  // reverse(24.0, defaultStepSpeed);
-  // delay(1000);
-  // spin(TO_LEFT, 90.0, defaultStepSpeed);
-  // delay(1000);
-  // spin(TO_RIGHT, 90.0, defaultStepSpeed);
-  // delay(1000);
-
-  // goToGoal(24.0, 24.0);
-  // goToGoal(-36.0, -48.0);
-
-  //Uncomment to read Encoder Data (uncomment to read on serial monitor)
-  // print_encoder_data();   //prints encoder data
-
-  // randomWander();
-
-  delay(wait_time);  //wait to move robot or read data
-}
+void loop() {}
