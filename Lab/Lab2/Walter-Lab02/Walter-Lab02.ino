@@ -476,10 +476,9 @@ void randomWander() {
 
 // reads a lidar given a pin
 int read_lidar(int pin) {
-  pinMode(pin, INPUT);  // Ensure pin is in INPUT mode
-  
+
   // Wait for pulse
-  int16_t t = pulseIn(pin, HIGH, 2000); // 2000us timeout
+  int16_t t = pulseIn(pin, HIGH);
   
   // Convert pulse width to distance (cm)
   int d;
