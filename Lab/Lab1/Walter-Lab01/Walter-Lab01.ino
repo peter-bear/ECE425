@@ -472,6 +472,10 @@ void goToAngle(double angle) {
   spin(direction, angle, defaultStepSpeed);
 }
 
+bool isZero(float num){
+  return num <= 0.0001 && num >= -0.0001;
+}
+
 /**
  * Moves the robot to the goal location (x, y) in inches.
  * @param x the x-coordinate of the goal in inches
@@ -496,6 +500,14 @@ void goToGoal(double x, double y) {
     angleDegree = 180 + angleDegree;
   } else if (x > 0 && y < 0) {
     angleDegree = -angleDegree;
+  }else if(isZero(x) && y > 0){
+    angleDegree = 90;
+  }else if(isZero(x) && y < 0){
+    angleDegree = -90;
+  }else if(x > 0 && isZero(y)){
+    angleDegree = 0;
+  }else if(x < 0 && isZero(y)){
+    angleDegree = 180;
   }
 
   goToAngle(angleDegree);
@@ -520,7 +532,7 @@ void setup() {
 
 void loop() {
   //uncomment each function one at a time to see what the code does
-  // forward(24.0, defaultStepSpeed);
+  forward(1.0, defaultStepSpeed);
   // delay(1000);
   // reverse(24.0, defaultStepSpeed);
   // delay(1000);
@@ -542,6 +554,7 @@ void loop() {
 
   // goToGoal(24.0, 24.0);
   // goToGoal(-36.0, -48.0);
+  // goToGoal(0.0, -15.0);
 
   //Uncomment to read Encoder Data (uncomment to read on serial monitor)
   // print_encoder_data();   //prints encoder data
