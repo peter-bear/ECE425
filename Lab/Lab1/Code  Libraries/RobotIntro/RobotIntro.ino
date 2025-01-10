@@ -453,10 +453,10 @@ void loop()
 {
   //uncomment each function one at a time to see what the code does
   // move1();//call move back and forth function
-  // move2();//call move back and forth function with AccelStepper library functions
+  move2();//call move back and forth function with AccelStepper library functions
   // move3();//call move back and forth function with MultiStepper library functions
   // move4(); //move to target position with 2 different speeds - absolute position
-  move5(); //move continuously with 2 different speeds
+  // move5(); //move continuously with 2 different speeds
   // move6(); //move to target position with 2 different speeds - relative position
 
   //Uncomment to read Encoder Data (uncomment to read on serial monitor)

@@ -23,7 +23,7 @@
 
 ### Lab worksheet
 
-
+[Lab02 - Avoid Obstacle  Random Wander Worksheet (W2324).docx](https://rosehulman-my.sharepoint.com/:w:/g/personal/biz_rose-hulman_edu/EZ-xpFDsNtBBj4C1EGK_vgcBCUaWBGeHx7MBaYUXYSG3qQ?e=Hk7kFs)
 
 
 

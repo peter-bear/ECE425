@@ -136,7 +136,7 @@ const float pi = 3.14159;          //pi
 const float wheelRadius = 1.7;     //robot wheel radius in inches
 const int stepsPerRevol = 800;     //robot wheel steps per revolution
 const float robotWidth = 9.0;      //robot width in inches
-const int defaultStepSpeed = 400;  //robot default speed in steps per second
+const int defaultStepSpeed = 300;  //robot default speed in steps per second
 
 const int PIDThreshold = 50;  //PID threshold
 const int PIDkp = 1;          //PID proportional gain
@@ -164,6 +164,8 @@ int16_t lidar_pins[4] = { 8, 9, 10, 11 };
 
 int16_t leftSnr = 3;
 int16_t rightSnr = 4;
+
+const int MAX_LIDAR_DISTANCE = 40;
 
 // a struct to hold lidar data
 struct lidar {
@@ -273,8 +275,8 @@ void resetEncoder() {
 
 /*this function will stop the steppers*/
 void stopMove() {
-  stepperRight.stop();       // Stop right motor
-  stepperLeft.stop();        // Stop left motor
+  stepperRight.stop();  // Stop right motor
+  stepperLeft.stop();   // Stop left motor
 }
 
 /*
@@ -371,8 +373,10 @@ void spin(int direction, double angle, int speed) {
  * @param speed the speed in steps per second to move the robot
  */
 void forward(double distance, int speed) {
-  // resetEncoder();
+  resetEncoder();
   int stepperMovePos = length2Steps(distance);
+  stepperLeft.setCurrentPosition(0);
+  stepperRight.setCurrentPosition(0);
 
   stepperLeft.move(stepperMovePos);   //move left wheel to relative position
   stepperRight.move(stepperMovePos);  //move right wheel to relative position
@@ -381,7 +385,7 @@ void forward(double distance, int speed) {
   stepperRight.setSpeed(speed);  //set right motor spee
   steppers.runSpeedToPosition();
 
-  // PIDControl(stepperMovePos, stepperMovePos);
+  PIDControl(stepperMovePos, stepperMovePos);
 }
 
 
@@ -491,12 +495,14 @@ void randomWander() {
   // printRandomValues(randAngle, randDistance);
 }
 
+
+
 // reads a lidar given a pin
 int read_lidar(int pin) {
   // Wait for pulse
   int16_t t = pulseIn(pin, HIGH);
 
-  int d = 40;  // Default to "no object"
+  int d = MAX_LIDAR_DISTANCE;  // Default to "no object"
   if (t != 0 && t <= 1850) {
     d = (t - 1000) * 3 / 40;
     if (d < 0) d = 0;
@@ -544,44 +550,13 @@ double cm2inch(int cm) {
   return 0.393701 * cm;
 }
 
-// void aggressiveKidBehavior() {
-//   digitalWrite(redLED, LOW);  // Initially LED is off
-
-//   // Set initial movement speeds
-//   stepperLeft.setSpeed(defaultStepSpeed);
-//   stepperRight.setSpeed(defaultStepSpeed);
-
-//   while (true) {
-//     if (isCloseObstacle()) {
-//       // Obstacle detected - stop motors and turn on LED
-//       digitalWrite(redLED, HIGH);
-//       stopMove();
-
-//       // Wait while obstacle remains
-//       while (isCloseObstacle()) {
-//         delay(50);  // Small delay to prevent CPU hogging
-//       }
-
-//       // Obstacle removed - reset movement
-//       digitalWrite(redLED, LOW);
-//       stepperLeft.setSpeed(defaultStepSpeed);
-//       stepperRight.setSpeed(defaultStepSpeed);
-//     }
-
-//     // Move the steppers one step at a time
-//     stepperLeft.runSpeed();
-//     stepperRight.runSpeed();
-
-//     // Small delay to allow sensor readings to be processed
-//     delay(1);
-//   }
-// }
-
 // Check for obstacles - adjust these thresholds based on your needs
 const int OBSTACLE_THRESHOLD = 10;  // centimeters
 
 void collideBehavior() {
   digitalWrite(redLED, HIGH);
+  digitalWrite(ylwLED, LOW);
+  digitalWrite(grnLED, LOW);
   stopMove();
   delay(50);  // Small delay to prevent CPU hogging
 }
@@ -603,10 +578,17 @@ bool isCloseObstacle() {
   //      (sonar_data.right < OBSTACLE_THRESHOLD && sonar_data.right != 0);
 }
 
+bool frontHasObstacle(){
+  lidar_data = RPC.call("read_lidars").as<struct lidar>();
+  return lidar_data.front < OBSTACLE_THRESHOLD && lidar_data.front != 0;
+}
+
 double runawayPropotion = 0.5;
 
 void runawayBehavior() {
   digitalWrite(ylwLED, HIGH);
+  digitalWrite(redLED, LOW);
+  digitalWrite(grnLED, LOW);
   lidar_data = RPC.call("read_lidars").as<struct lidar>();
 
   int x = lidar_data.front - lidar_data.back;
@@ -620,51 +602,109 @@ void runawayBehavior() {
   goToGoal(x_inch, y_inch);
 }
 
-double followPropotion = 0.5;
+const double followPropotion = 0.25;
+const double OBSTACLE_MARGIN = 2.0;
+const double FOLLOW_SPEED = 200;
+
+bool isWithinObstacleMargin(double frontDistance) {
+  return frontDistance < OBSTACLE_THRESHOLD + OBSTACLE_MARGIN && frontDistance > OBSTACLE_THRESHOLD - OBSTACLE_MARGIN;
+}
 
 void followBehavior() {
   digitalWrite(redLED, HIGH);
   digitalWrite(grnLED, HIGH);
+  digitalWrite(ylwLED, LOW);
+
   lidar_data = RPC.call("read_lidars").as<struct lidar>();
   int front_error_cm = lidar_data.front - OBSTACLE_THRESHOLD;
   double front_error_inch = cm2inch(front_error_cm);
 
-  while(true){
-    Serial.print("FRONT ERROR: ");
-    Serial.println(front_error_cm);
+  while (true) {
+    // Serial.print("FRONT ERROR: ");
+    // Serial.println(front_error_cm);
 
-    Serial.print("FRONT MOVE: ");
-    Serial.println(followPropotion*front_error_inch);
+    // Serial.print("FRONT MOVE: ");
+    // Serial.println(followPropotion * front_error_inch);
 
-    if(front_error_cm > 0){
-      forward(followPropotion*front_error_inch, defaultStepSpeed);
-      // stepperLeft.moveTo(followPropotion*front_error_inch);//left motor absolute position
-      // stepperRight.moveTo(followPropotion*front_error_inch);//right motor absolute position
+    if (!isWithinObstacleMargin(lidar_data.front)) {
+      if (lidar_data.front >= MAX_LIDAR_DISTANCE) break;
 
-      // stepperLeft.setSpeed(defaultStepSpeed);
-      // stepperRight.setSpeed(defaultStepSpeed);
+      double moveDistance = abs(followPropotion * front_error_inch);
 
-      // stepperLeft.setCurrentPosition(0);
-      // stepperRight.setCurrentPosition(0);
-
-    }else if(front_error_cm < 0){
-      reverse(followPropotion*front_error_inch, defaultStepSpeed);
-      // stepperLeft.moveTo(-followPropotion*front_error_inch);//left motor absolute position
-      // stepperRight.moveTo(-followPropotion*front_error_inch);//right motor absolute position
-
-      // stepperLeft.setSpeed(-defaultStepSpeed);
-      // stepperRight.setSpeed(-defaultStepSpeed); 
-
-      // stepperLeft.setCurrentPosition(0);
-      // stepperRight.setCurrentPosition(0);     
-
+      if (front_error_cm > 0) {
+        forward(moveDistance, FOLLOW_SPEED);
+      } else if (front_error_cm < 0) {
+        reverse(moveDistance, FOLLOW_SPEED);
+      }
     }
 
     lidar_data = RPC.call("read_lidars").as<struct lidar>();
     front_error_cm = lidar_data.front - OBSTACLE_THRESHOLD;
     front_error_inch = cm2inch(front_error_cm);
+    delay(20);
   }
-  
+}
+
+
+void smartWanderBehavior() {
+
+  int randAngle = random(-maxTurnAngle, maxTurnAngle);
+  int randDistance = random(maxDistanceMove);
+  randDistance = length2Steps(randDistance);
+
+  goToAngle(randAngle);
+
+  stepperLeft.move(randDistance);
+  stepperRight.move(randDistance);
+
+  stepperLeft.setSpeed(defaultStepSpeed);
+  stepperRight.setSpeed(defaultStepSpeed);
+
+  while (steppers.run()) {
+    digitalWrite(grnLED, HIGH);  //turn on green LED
+    digitalWrite(ylwLED, LOW);
+    digitalWrite(redLED, LOW);
+
+    while (isCloseObstacle()) {
+      // Obstacle detected - stop motors and turn on LED
+      collideBehavior();
+      delay(100);
+      runawayBehavior();
+    }
+  }
+
+  // Small delay to allow sensor readings to be processed
+  delay(1);
+}
+
+void smartFollowBehavior() {
+  int randAngle = random(-maxTurnAngle, maxTurnAngle);
+  int randDistance = random(maxDistanceMove);
+  randDistance = length2Steps(randDistance);
+
+  goToAngle(randAngle);
+
+  stepperLeft.move(randDistance);
+  stepperRight.move(randDistance);
+
+  stepperLeft.setSpeed(defaultStepSpeed);
+  stepperRight.setSpeed(defaultStepSpeed);
+
+  while (steppers.run()) {
+    digitalWrite(grnLED, HIGH);  //turn on green LED
+    digitalWrite(ylwLED, LOW);
+    digitalWrite(redLED, LOW);
+
+    while (frontHasObstacle()) {
+      // Obstacle detected - stop motors and turn on LED
+      collideBehavior();
+      delay(100);
+      followBehavior();
+    }
+  }
+
+  // Small delay to allow sensor readings to be processed
+  delay(1);
 }
 
 void setupM7() {
@@ -675,34 +715,43 @@ void setupM7() {
 }
 
 void loopM7() {
+  // digitalWrite(redLED, LOW);  // Initially LED is off
+  // digitalWrite(ylwLED, LOW);
+  // digitalWrite(grnLED, LOW);
+
+  // // Set initial movement speeds
+  // stepperLeft.setSpeed(defaultStepSpeed);
+  // stepperRight.setSpeed(defaultStepSpeed);
+
+  // while (true) {
+  //   while (isCloseObstacle()) {
+  //     // Obstacle detected - stop motors and turn on LED
+  //     collideBehavior();
+  //     // runawayBehavior();
+  //     // followBehavior();
+  //   }
+  //   // Obstacle removed - reset movement
+  //   digitalWrite(redLED, LOW);
+  //   digitalWrite(ylwLED, LOW);
+  //   digitalWrite(grnLED, LOW);
+  //   stepperLeft.setSpeed(defaultStepSpeed);
+  //   stepperRight.setSpeed(defaultStepSpeed);
+
+  //   // Move the steppers one step at a time
+  //   stepperLeft.runSpeed();
+  //   stepperRight.runSpeed();
+
+  //   // Small delay to allow sensor readings to be processed
+  //   delay(1);
+  // }
+
   digitalWrite(redLED, LOW);  // Initially LED is off
-  digitalWrite(ylwLED, LOW);  
+  digitalWrite(ylwLED, LOW);
   digitalWrite(grnLED, LOW);
 
-  // Set initial movement speeds
-  stepperLeft.setSpeed(defaultStepSpeed);
-  stepperRight.setSpeed(defaultStepSpeed);
-
   while (true) {
-    while (isCloseObstacle()) {
-      // Obstacle detected - stop motors and turn on LED
-      collideBehavior();
-      // runawayBehavior();
-      followBehavior();
-    }
-    // Obstacle removed - reset movement
-    digitalWrite(redLED, LOW);
-    digitalWrite(ylwLED, LOW);
-    digitalWrite(grnLED, LOW);
-    stepperLeft.setSpeed(defaultStepSpeed);
-    stepperRight.setSpeed(defaultStepSpeed);
-
-    // Move the steppers one step at a time
-    stepperLeft.runSpeed();
-    stepperRight.runSpeed();
-
-    // Small delay to allow sensor readings to be processed
-    delay(1);
+    // smartWanderBehavior();
+    smartFollowBehavior();
   }
 }
 
