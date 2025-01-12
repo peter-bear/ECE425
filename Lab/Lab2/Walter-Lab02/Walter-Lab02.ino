@@ -167,6 +167,10 @@ int16_t rightSnr = 4;
 
 const int MAX_LIDAR_DISTANCE = 40;
 
+// Check for obstacles - adjust these thresholds based on your needs
+const int OBSTACLE_THRESHOLD = 30;  // centimeters
+
+
 // a struct to hold lidar data
 struct lidar {
   // this can easily be extended to contain sonar data as well
@@ -195,6 +199,9 @@ struct sonar {
 struct sonar read_sonars() {
   return sonarData;
 }
+
+struct lidar lidar_data;
+struct sonar sonar_data;
 
 //interrupt function to count left encoder tickes
 void LwheelSpeed() {
@@ -424,32 +431,21 @@ void goToAngle(double angle) {
   spin(direction, angle, defaultStepSpeed);
 }
 
-bool isZero(float num) {
-  return num <= 0.0001 && num >= -0.0001;
-}
-
 double getTurnAngle(double x, double y) {
   double angleRadian = atan(y / x);
+
   double angleDegree = angleRadian * 180.0 / pi;
 
   if (x > 0 && y > 0) {
     angleDegree = angleDegree;
-  } else if (x < 0 && y > 0) {
-    angleDegree = 90 + angleDegree;
+  } else if (x < 0 && y >= 0) {
+    angleDegree = 180 + angleDegree;
   } else if (x < 0 && y < 0) {
     angleDegree = 180 + angleDegree;
   } else if (x > 0 && y < 0) {
-    // Serial.println(angleDegree);
     angleDegree = angleDegree;
-  } else if (isZero(x) && y > 0) {
-    angleDegree = 90;
-  } else if (isZero(x) && y < 0) {
-    angleDegree = -90;
-  } else if (x > 0 && isZero(y)) {
-    angleDegree = 0;
-  } else if (x < 0 && isZero(y)) {
-    angleDegree = 180;
   }
+
   return angleDegree;
 }
 
@@ -468,11 +464,11 @@ void goToGoal(double x, double y) {
   double distance = sqrt(pow(x, 2) + pow(y, 2));
   double angleDegree = getTurnAngle(x, y);
 
-  // Serial.print("Angle: ");
-  // Serial.println(angleDegree);
+  Serial.print("Angle: ");
+  Serial.println(angleDegree);
 
   goToAngle(angleDegree);
-  delay(500);
+  delay(1000);
   forward(distance, defaultStepSpeed);
 }
 
@@ -550,9 +546,6 @@ double cm2inch(int cm) {
   return 0.393701 * cm;
 }
 
-// Check for obstacles - adjust these thresholds based on your needs
-const int OBSTACLE_THRESHOLD = 10;  // centimeters
-
 void collideBehavior() {
   digitalWrite(redLED, HIGH);
   digitalWrite(ylwLED, LOW);
@@ -560,9 +553,6 @@ void collideBehavior() {
   stopMove();
   delay(50);  // Small delay to prevent CPU hogging
 }
-
-struct lidar lidar_data;
-struct sonar sonar_data;
 
 bool isCloseObstacle() {
   // Read sensor data
@@ -573,17 +563,36 @@ bool isCloseObstacle() {
   // print_sensor_data(lidar_data, sonar_data);
 
   // Return true if any sensor detects a close obstacle
-  return (lidar_data.front < OBSTACLE_THRESHOLD && lidar_data.front != 0) || (lidar_data.right < OBSTACLE_THRESHOLD && lidar_data.right != 0) || (lidar_data.back < OBSTACLE_THRESHOLD && lidar_data.back != 0) || (lidar_data.left < OBSTACLE_THRESHOLD && lidar_data.left != 0);
+  return frontHasObstacle() || backHasObstacle() || leftHasObstacle() || rightHasObstacle();
   // return (sonar_data.left < OBSTACLE_THRESHOLD && sonar_data.left != 0) ||
   //      (sonar_data.right < OBSTACLE_THRESHOLD && sonar_data.right != 0);
 }
 
-bool frontHasObstacle(){
+bool checkFrontObstacle() {
   lidar_data = RPC.call("read_lidars").as<struct lidar>();
-  return lidar_data.front < OBSTACLE_THRESHOLD && lidar_data.front != 0;
+  return frontHasObstacle();
 }
 
+bool frontHasObstacle() {
+  return lidar_data.front < OBSTACLE_THRESHOLD;
+}
+
+bool backHasObstacle() {
+  return lidar_data.back < OBSTACLE_THRESHOLD;
+}
+
+bool leftHasObstacle() {
+  return lidar_data.left < OBSTACLE_THRESHOLD;
+}
+
+bool rightHasObstacle() {
+  return lidar_data.right < OBSTACLE_THRESHOLD;
+}
+
+
 double runawayPropotion = 0.5;
+
+const int forwardDistance = 10;
 
 void runawayBehavior() {
   digitalWrite(ylwLED, HIGH);
@@ -599,7 +608,24 @@ void runawayBehavior() {
 
   // print_sensor_data(lidar_data, sonar_data);
 
-  goToGoal(x_inch, y_inch);
+  double turnAngle = 0;
+
+  if (!frontHasObstacle() && !backHasObstacle() && leftHasObstacle() && rightHasObstacle()) {
+    turnAngle = 0;
+  } else if (!leftHasObstacle() && !rightHasObstacle() && frontHasObstacle() && backHasObstacle()) {
+    turnAngle = 90.0;
+  } else if (frontHasObstacle() && backHasObstacle() && leftHasObstacle() && rightHasObstacle()) {
+    turnAngle = 3600;
+  } else {
+    turnAngle = getTurnAngle(x_inch, y_inch);
+  }
+
+  if(turnAngle <= 360){
+    goToAngle(turnAngle);
+    forward(forwardDistance, defaultStepSpeed);
+  }else{
+    stopMove();
+  }
 }
 
 const double followPropotion = 0.25;
@@ -695,7 +721,7 @@ void smartFollowBehavior() {
     digitalWrite(ylwLED, LOW);
     digitalWrite(redLED, LOW);
 
-    while (frontHasObstacle()) {
+    while (checkFrontObstacle()) {
       // Obstacle detected - stop motors and turn on LED
       collideBehavior();
       delay(100);
@@ -750,8 +776,9 @@ void loopM7() {
   digitalWrite(grnLED, LOW);
 
   while (true) {
-    // smartWanderBehavior();
-    smartFollowBehavior();
+    smartWanderBehavior();
+    // smartFollowBehavior();
+    // runawayBehavior();
   }
 }
 
