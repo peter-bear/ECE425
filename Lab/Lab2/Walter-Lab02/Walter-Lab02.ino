@@ -168,7 +168,7 @@ int16_t rightSnr = 4;
 const int MAX_LIDAR_DISTANCE = 40;
 
 // Check for obstacles - adjust these thresholds based on your needs
-const int OBSTACLE_THRESHOLD = 30;  // centimeters
+const int OBSTACLE_THRESHOLD = 10;  // centimeters
 
 
 // a struct to hold lidar data
@@ -416,7 +416,7 @@ void reverse(double distance, int speed) {
 void goToAngle(double angle) {
   // Serial.println("goToAngle function");
 
-  digitalWrite(grnLED, HIGH);  //turn on green LED
+  // digitalWrite(grnLED, HIGH);  //turn on green LED
   // if angle larger than 0, turn left
   // if angle less than 0, turn right
   int direction = 0;
@@ -616,6 +616,8 @@ void runawayBehavior() {
     turnAngle = 90.0;
   } else if (frontHasObstacle() && backHasObstacle() && leftHasObstacle() && rightHasObstacle()) {
     turnAngle = 3600;
+  } else if (!frontHasObstacle() && !backHasObstacle() && !leftHasObstacle() && !rightHasObstacle()){
+    return;
   } else {
     turnAngle = getTurnAngle(x_inch, y_inch);
   }
@@ -754,7 +756,7 @@ void loopM7() {
   //     // Obstacle detected - stop motors and turn on LED
   //     collideBehavior();
   //     // runawayBehavior();
-  //     // followBehavior();
+  //     followBehavior();
   //   }
   //   // Obstacle removed - reset movement
   //   digitalWrite(redLED, LOW);
@@ -776,8 +778,8 @@ void loopM7() {
   digitalWrite(grnLED, LOW);
 
   while (true) {
-    smartWanderBehavior();
-    // smartFollowBehavior();
+    // smartWanderBehavior();
+    smartFollowBehavior();
     // runawayBehavior();
   }
 }
