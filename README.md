@@ -27,3 +27,15 @@
 
 
 
+
+
+## Lab 3
+
+### Prelab
+
+https://docs.google.com/document/d/1W71TCRhlu2uaK8CHVJI5YoJ8dL_T15BMIO-etkvDe6Y/edit?usp=sharing
+
+
+
+
+
