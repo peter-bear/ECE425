@@ -1,51 +1,78 @@
-
 /*
-  Walter-Lab01.ino
-  Yao Xiong & Zhengyang Bi 2024/12/15
+  Walter-Lab02.ino
+  Yao Xiong & Zhengyang Bi 2024/1/17
 
-  This program will introduce using the stepper motor library to create motion algorithms for the robot.
-  The motions will be go to angle, go to goal, move in a circle, square, figure eight and teleoperation (stop, forward, spin, reverse, turn)
-  It will also include wireless commmunication for remote control of the robot by using a game controller or serial monitor.
-  The primary functions created are
-  moveCircle - given the diameter in inches, direction of clockwise or counterclockwise, the speed of the robot, move the robot in a circle with that diameter
-  moveFigure8 - given the diameter in inches, use the moveCircle() function with direction input to create a Figure 8
+  This program implements various autonomous behaviors for a wheeled robot using stepper motors and distance sensors.
+  The robot features reactive behaviors including obstacle avoidance, runaway response, and following behavior.
+  It uses a dual-core architecture (M7 and M4) for parallel processing of sensor data and motor control.
+  
+  The primary functions created are:
+  goToAngle - turns robot to specified absolute angle in degrees
+  goToGoal - moves robot to specified x,y coordinate in inches
   forward, reverse - both wheels move with same velocity, same direction
-  pivot- one wheel stationary, one wheel moves forward or back, given the direction of to left or to right, the pivot angle in degrees, and speed in steps per second
-  spin - both wheels move with same velocity opposite direction, given the direction of to left or to right, the spin angle in degrees, and speed in steps per second
-  turn - both wheels move with same direction different velocity, give the direction of to left or to right, the turning time in seconds, and velocity difference in steps per second
-  stop - both wheels stationary
-
-  Interrupts
-  https://www.arduino.cc/reference/en/language/functions/external-interrupts/attachinterrupt/
-  https://www.arduino.cc/en/Tutorial/CurieTimer1Interrupt
-  https://playground.arduino.cc/code/timer1
-  https://playground.arduino.cc/Main/TimerPWMCheatsheet
-  http://arduinoinfo.mywikis.net/wiki/HOME
+  spin - both wheels move with same velocity opposite direction
+  smartWanderBehavior - random movement with obstacle avoidance
+  runawayBehavior - moves away from detected obstacles
+  followBehavior - maintains constant distance from detected obstacle
+  collideBehavior - emergency stop when obstacle detected
+  
+  Sensor Integration:
+  - 4 LIDAR sensors (front, back, left, right) for distance measurement
+  - 2 wheel encoders for position tracking
+  - PID control system for accurate movement
+  
+  Core Architecture:
+  M4 Core - Handles sensor data collection and processing
+  M7 Core - Manages movement control and behavioral algorithms
+  Uses RPC (Remote Procedure Call) for inter-core communication
 
   Hardware Connections:
   Arduino pin mappings: https://docs.arduino.cc/tutorials/giga-r1-wifi/cheat-sheet#pins
   A4988 Stepper Motor Driver Pinout: https://www.pololu.com/product/1182 
 
+  Stepper Motor Control:
   digital pin 48 - enable PIN on A4988 Stepper Motor Driver StepSTICK
   digital pin 50 - right stepper motor step pin
   digital pin 51 - right stepper motor direction pin
   digital pin 52 - left stepper motor step pin
   digital pin 53 - left stepper motor direction pin
+  
+  Status LEDs:
   digital pin 13 - enable LED on microcontroller
-
   digital pin 5 - red LED in series with 220 ohm resistor
   digital pin 6 - green LED in series with 220 ohm resistor
   digital pin 7 - yellow LED in series with 220 ohm resistor
 
+  Sensors:
   digital pin 18 - left encoder pin
   digital pin 19 - right encoder pin
+  digital pin 8 - front LIDAR
+  digital pin 9 - back LIDAR  
+  digital pin 10 - left LIDAR
+  digital pin 11 - right LIDAR
 
-  INSTALL THE LIBRARY
-  AccelStepper Library: https://www.airspayce.com/mikem/arduino/AccelStepper/
+  Constants:
+  Robot Physical Parameters:
+  - Wheel radius: 1.7 inches
+  - Robot width: 9.0 inches
+  - Steps per revolution: 800
   
+  Movement Parameters:
+  - Default step speed: 300 steps/sec
+  - Maximum speed: 1500 steps/sec
+  - Maximum acceleration: 10000 steps/sec^2
+  
+  Sensor Parameters:  
+  - Maximum LIDAR distance: 40 cm
+  - Obstacle threshold: 10 cm
+  
+  Required Libraries:
+  - AccelStepper: https://www.airspayce.com/mikem/arduino/AccelStepper/
+  Install via:
   Sketch->Include Library->Manage Libraries...->AccelStepper->Include
   OR
   Sketch->Include Library->Add .ZIP Library...->AccelStepper-1.53.zip
+  
   See PlatformIO documentation for proper way to install libraries in Visual Studio
 */
 
@@ -55,39 +82,6 @@
 #include <MultiStepper.h>  //include multiple stepper motor library
 #include <math.h>
 #include "RPC.h"
-
-/**
-// Can be included as many times as necessary, without `Multiple Definitions` Linker Error
-#include "Portenta_H7_TimerInterrupt.h"
-
-// To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
-#include "Portenta_H7_ISR_Timer.h"
-
-// Timer
-// These define's must be placed at the beginning before #include "Portenta_H7_TimerInterrupt.h"
-// _TIMERINTERRUPT_LOGLEVEL_ from 0 to 4
-// Don't define _TIMERINTERRUPT_LOGLEVEL_ > 0. Only for special ISR debugging only. Can hang the system.
-#define _TIMERINTERRUPT_LOGLEVEL_     4
-
-// Timer
-#define TIMER_INTERVAL_MS         100
-#define HW_TIMER_INTERVAL_MS      50
-
-#define TIMER_INTERVAL_0_5S           500L
-
-// Init timer TIM12
-Portenta_H7_Timer ITimer(TIM12);
-
-// Init Portenta_H7_ISR_Timer
-// Each Portenta_H7_ISR_Timer can service 16 different ISR-based timers
-Portenta_H7_ISR_Timer ISR_Timer;
-
-void TimerHandler()
-{
-  ISR_Timer.run();
-}
-
-*/
 
 //state LEDs connections
 #define redLED 5            //red LED for displaying states
@@ -431,6 +425,17 @@ void goToAngle(double angle) {
   spin(direction, angle, defaultStepSpeed);
 }
 
+
+/**
+ * @brief Calculates the turn angle in degrees based on the given x and y coordinates.
+ *
+ * This function computes the angle in radians using the arctangent of y/x, then converts it to degrees.
+ * It adjusts the angle based on the quadrant of the (x, y) point to ensure the correct angle is returned.
+ *
+ * @param x The x-coordinate.
+ * @param y The y-coordinate.
+ * @return The turn angle in degrees.
+ */
 double getTurnAngle(double x, double y) {
   double angleRadian = atan(y / x);
 
@@ -472,6 +477,11 @@ void goToGoal(double x, double y) {
   forward(distance, defaultStepSpeed);
 }
 
+/**
+ * Prints the random values generated for the angle and distance.
+ * @param randAngle the random angle generated
+ * @param randDistance the random distance generated
+ */
 void printRandomValues(int randAngle, int randDistance) {
   Serial.print("Random Values:\n\tAngle: ");
   Serial.print(randAngle);
@@ -479,6 +489,10 @@ void printRandomValues(int randAngle, int randDistance) {
   Serial.println(randDistance);
 }
 
+/**
+ * Generates a random angle and distance for the robot to move.
+ * The robot will turn to the random angle, then move forward the random distance.
+ */
 void randomWander() {
   digitalWrite(grnLED, HIGH);  //turn on green LED
 
@@ -525,6 +539,7 @@ int read_sonar(int pin) {
   return distance;
 }
 
+// prints the sensor data
 void print_sensor_data(struct lidar data, struct sonar data2) {
   Serial.print("lidar: ");
   Serial.print(data.front);
@@ -542,10 +557,12 @@ void print_sensor_data(struct lidar data, struct sonar data2) {
   // Serial.println();
 }
 
+// converts cm to inches
 double cm2inch(int cm) {
   return 0.393701 * cm;
 }
 
+// collide behavior
 void collideBehavior() {
   digitalWrite(redLED, HIGH);
   digitalWrite(ylwLED, LOW);
@@ -554,13 +571,11 @@ void collideBehavior() {
   delay(50);  // Small delay to prevent CPU hogging
 }
 
+// check if there is an obstacle around the robot
 bool isCloseObstacle() {
   // Read sensor data
   lidar_data = RPC.call("read_lidars").as<struct lidar>();
   sonar_data = RPC.call("read_sonars").as<struct sonar>();
-
-  // Print sensor data for debugging
-  // print_sensor_data(lidar_data, sonar_data);
 
   // Return true if any sensor detects a close obstacle
   return frontHasObstacle() || backHasObstacle() || leftHasObstacle() || rightHasObstacle();
@@ -568,32 +583,61 @@ bool isCloseObstacle() {
   //      (sonar_data.right < OBSTACLE_THRESHOLD && sonar_data.right != 0);
 }
 
+// check if there is an obstacle in front of the robot
 bool checkFrontObstacle() {
   lidar_data = RPC.call("read_lidars").as<struct lidar>();
   return frontHasObstacle();
 }
 
+// check if there is an obstacle in the front of the robot
 bool frontHasObstacle() {
   return lidar_data.front < OBSTACLE_THRESHOLD;
 }
 
+// check if there is an obstacle in the back of the robot
 bool backHasObstacle() {
   return lidar_data.back < OBSTACLE_THRESHOLD;
 }
 
+// check if there is an obstacle on the left of the robot
 bool leftHasObstacle() {
   return lidar_data.left < OBSTACLE_THRESHOLD;
 }
 
+// check if there is an obstacle on the right of the robot
 bool rightHasObstacle() {
   return lidar_data.right < OBSTACLE_THRESHOLD;
 }
 
 
-double runawayPropotion = 0.5;
-
+// Runaway behavior
+const double runawayPropotion = 0.5;
 const int forwardDistance = 10;
 
+/**
+ * @brief Executes the runaway behavior for the robot.
+ * 
+ * This function controls the robot's movement based on sensor data to avoid obstacles.
+ * It reads lidar data, calculates the necessary turn angle, and moves the robot accordingly.
+ * 
+ * The function performs the following steps:
+ * 1. Turns on the yellow LED and turns off the red and green LEDs.
+ * 2. Reads lidar data using an RPC call.
+ * 3. Calculates the x and y distances in inches based on the lidar data.
+ * 4. Determines the turn angle based on the presence of obstacles detected by the sensors.
+ * 5. Moves the robot to the calculated angle and moves forward if the turn angle is valid.
+ * 6. Stops the robot if the turn angle is invalid.
+ * 
+ * The function uses the following helper functions:
+ * - frontHasObstacle(): Checks if there is an obstacle in front of the robot.
+ * - backHasObstacle(): Checks if there is an obstacle behind the robot.
+ * - leftHasObstacle(): Checks if there is an obstacle to the left of the robot.
+ * - rightHasObstacle(): Checks if there is an obstacle to the right of the robot.
+ * - getTurnAngle(double x_inch, double y_inch): Calculates the turn angle based on x and y distances.
+ * - goToAngle(double angle): Turns the robot to the specified angle.
+ * - forward(double distance, int speed): Moves the robot forward by the specified distance at the given speed.
+ * - stopMove(): Stops the robot's movement.
+ */
 void runawayBehavior() {
   digitalWrite(ylwLED, HIGH);
   digitalWrite(redLED, LOW);
@@ -634,10 +678,33 @@ const double followPropotion = 0.25;
 const double OBSTACLE_MARGIN = 2.0;
 const double FOLLOW_SPEED = 200;
 
+// Check if the robot is within the obstacle margin
 bool isWithinObstacleMargin(double frontDistance) {
   return frontDistance < OBSTACLE_THRESHOLD + OBSTACLE_MARGIN && frontDistance > OBSTACLE_THRESHOLD - OBSTACLE_MARGIN;
 }
 
+
+/**
+ * @brief Executes the follow behavior for a robot using LIDAR data.
+ * 
+ * This function controls the robot to follow an object by maintaining a certain distance
+ * from it. It uses LIDAR data to determine the distance to the object and adjusts the 
+ * robot's movement accordingly. The function continuously reads LIDAR data and moves 
+ * the robot forward or backward to maintain the desired distance.
+ * 
+ * The function performs the following steps:
+ * 1. Turns on the red and green LEDs and turns off the yellow LED.
+ * 2. Reads the initial LIDAR data and calculates the front error in centimeters and inches.
+ * 3. Enters an infinite loop where it:
+ *    - Checks if the object is within the obstacle margin.
+ *    - If the object is not within the obstacle margin and is within the maximum LIDAR distance:
+ *      - Calculates the movement distance based on the proportional control.
+ *      - Moves the robot forward if the front error is positive, or backward if the front error is negative.
+ *    - Reads the updated LIDAR data and recalculates the front error.
+ *    - Delays for 20 milliseconds before the next iteration.
+ * 
+ * The function exits the loop and stops the behavior if the object is beyond the maximum LIDAR distance.
+ */
 void followBehavior() {
   digitalWrite(redLED, HIGH);
   digitalWrite(grnLED, HIGH);
@@ -674,6 +741,26 @@ void followBehavior() {
 }
 
 
+/**
+ * @brief Executes the smart wander behavior for a robot.
+ * 
+ * This function makes the robot move in a random direction and distance,
+ * while continuously checking for obstacles. If an obstacle is detected,
+ * the robot will stop, perform a collision avoidance behavior, and then
+ * resume wandering.
+ * 
+ * The function performs the following steps:
+ * 1. Generates a random angle and distance for the robot to move.
+ * 2. Converts the distance to steps for the stepper motors.
+ * 3. Rotates the robot to the random angle.
+ * 4. Moves the robot forward by the random distance.
+ * 5. Sets the speed of the stepper motors to the default speed.
+ * 6. Continuously runs the stepper motors and checks for obstacles.
+ * 7. If an obstacle is detected, stops the motors, performs collision
+ *    avoidance, and resumes wandering.
+ * 8. Turns on the green LED while moving, and turns off other LEDs.
+ * 9. Adds a small delay to allow sensor readings to be processed.
+ */
 void smartWanderBehavior() {
 
   int randAngle = random(-maxTurnAngle, maxTurnAngle);
@@ -705,6 +792,25 @@ void smartWanderBehavior() {
   delay(1);
 }
 
+/**
+ * @brief Executes the smart follow behavior for a robot.
+ * 
+ * This function makes the robot move in a random direction and distance,
+ * while continuously checking for obstacles. If an obstacle is detected,
+ * the robot will stop and execute the collide behavior, followed by the
+ * follow behavior.
+ * 
+ * The function performs the following steps:
+ * 1. Generates a random angle and distance for the robot to move.
+ * 2. Converts the distance to steps for the stepper motors.
+ * 3. Rotates the robot to the generated angle.
+ * 4. Moves the robot forward by the generated distance.
+ * 5. Sets the speed of the stepper motors to the default speed.
+ * 6. Continuously runs the stepper motors while checking for obstacles.
+ * 7. If an obstacle is detected, stops the motors and executes the collide behavior.
+ * 8. Turns on the green LED to indicate movement.
+ * 9. Adds a small delay to allow sensor readings to be processed.
+ */
 void smartFollowBehavior() {
   int randAngle = random(-maxTurnAngle, maxTurnAngle);
   int randDistance = random(maxDistanceMove);
@@ -735,6 +841,15 @@ void smartFollowBehavior() {
   delay(1);
 }
 
+/**
+ * @brief Initializes the stepper motor and sets up interrupts for the left and right wheel encoders.
+ * 
+ * This function performs the following tasks:
+ * - Initializes the stepper motor by calling init_stepper().
+ * - Attaches an interrupt to the left wheel encoder pin, triggering the LwheelSpeed function on any change.
+ * - Attaches an interrupt to the right wheel encoder pin, triggering the RwheelSpeed function on any change.
+ * - Delays execution for 1000 milliseconds to allow for setup stabilization.
+ */
 void setupM7() {
   init_stepper();                                                          //set up stepper motor
   attachInterrupt(digitalPinToInterrupt(ltEncoder), LwheelSpeed, CHANGE);  //init the interrupt mode for the left encoder
@@ -742,37 +857,55 @@ void setupM7() {
   delay(1000);
 }
 
+/**
+ * @brief Controls the movement and obstacle-following behavior of the robot.
+ * 
+ * This function initializes the LEDs and stepper motor speeds, then enters an infinite loop
+ * where it continuously checks for close obstacles. If an obstacle is detected, it calls
+ * the collideBehavior() and followBehavior() functions to handle the obstacle. Once the
+ * obstacle is removed, it resets the LEDs and stepper motor speeds and continues moving
+ * the steppers one step at a time with a small delay to allow sensor readings to be processed.
+ */
+void moveAndFollowBehavior() {
+  digitalWrite(redLED, LOW);  // Initially LED is off
+  digitalWrite(ylwLED, LOW);
+  digitalWrite(grnLED, LOW);
+
+  // Set initial movement speeds
+  stepperLeft.setSpeed(defaultStepSpeed);
+  stepperRight.setSpeed(defaultStepSpeed);
+
+  while (true) {
+    while (isCloseObstacle()) {
+      collideBehavior();
+      followBehavior();
+    }
+    // Obstacle removed - reset movement
+    digitalWrite(redLED, LOW);
+    digitalWrite(ylwLED, LOW);
+    digitalWrite(grnLED, LOW);
+    stepperLeft.setSpeed(defaultStepSpeed);
+    stepperRight.setSpeed(defaultStepSpeed);
+
+    // Move the steppers one step at a time
+    stepperLeft.runSpeed();
+    stepperRight.runSpeed();
+
+    // Small delay to allow sensor readings to be processed
+    delay(1);
+  }
+}
+
+
+/**
+ * @brief Main loop function for behavior control.
+ * 
+ * This function initializes the state of three LEDs (red, yellow, green) to off.
+ * It then enters an infinite loop where it continuously executes the 
+ * smartFollowBehavior function. Other behaviors such as smartWanderBehavior 
+ * and runawayBehavior are commented out and can be enabled if needed.
+ */
 void loopM7() {
-  // digitalWrite(redLED, LOW);  // Initially LED is off
-  // digitalWrite(ylwLED, LOW);
-  // digitalWrite(grnLED, LOW);
-
-  // // Set initial movement speeds
-  // stepperLeft.setSpeed(defaultStepSpeed);
-  // stepperRight.setSpeed(defaultStepSpeed);
-
-  // while (true) {
-  //   while (isCloseObstacle()) {
-  //     // Obstacle detected - stop motors and turn on LED
-  //     collideBehavior();
-  //     // runawayBehavior();
-  //     followBehavior();
-  //   }
-  //   // Obstacle removed - reset movement
-  //   digitalWrite(redLED, LOW);
-  //   digitalWrite(ylwLED, LOW);
-  //   digitalWrite(grnLED, LOW);
-  //   stepperLeft.setSpeed(defaultStepSpeed);
-  //   stepperRight.setSpeed(defaultStepSpeed);
-
-  //   // Move the steppers one step at a time
-  //   stepperLeft.runSpeed();
-  //   stepperRight.runSpeed();
-
-  //   // Small delay to allow sensor readings to be processed
-  //   delay(1);
-  // }
-
   digitalWrite(redLED, LOW);  // Initially LED is off
   digitalWrite(ylwLED, LOW);
   digitalWrite(grnLED, LOW);
@@ -793,6 +926,7 @@ void setupM4() {
   RPC.bind("read_sonars", read_sonars);  // bind a method to return the lidar data all at once
 }
 
+//loop for the M4 to read the sensors
 void loopM4() {
   // Add delays between readings to allow sensor to stabilize
   lidarData.front = read_lidar(ft_lidar);
