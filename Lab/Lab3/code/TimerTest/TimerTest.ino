@@ -2,24 +2,32 @@
 
 const int ledPin = 5;
 volatile bool ledState = false;
+static int previousMillis = 0;
+
+// Function to check if 1 second has passed
+bool isOneSecondPassed() {
+    int currentMillis = millis();
+    if (currentMillis - previousMillis >= 1000) {
+        previousMillis = currentMillis;
+        return true;
+    }
+    return false;
+}
+
+// Function to toggle LED state
+void toggleLED() {
+    ledState = !ledState;
+    digitalWrite(ledPin, ledState);
+    Serial.println("Timer triggered!");
+}
 
 void setup() {
-  Serial.begin(115200);
-  pinMode(ledPin, OUTPUT);
+    Serial.begin(115200);
+    pinMode(ledPin, OUTPUT);
 }
 
 void loop() {
-  static int previousMillis = 0;
-  int currentMillis = millis(); // Get current time in milliseconds
-  
-  // Check if 1 second has passed
-  if(currentMillis - previousMillis >= 1000) {
-    previousMillis = currentMillis;
-    
-    // Toggle LED
-    ledState = !ledState;
-    digitalWrite(ledPin, ledState);
-    
-    Serial.println("Timer triggered!");
-  }
+    if (isOneSecondPassed()) {
+        toggleLED();
+    }
 }

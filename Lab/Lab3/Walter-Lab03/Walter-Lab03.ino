@@ -914,19 +914,29 @@ void moveAndFollowBehavior() {
 }
 
 
+// Constants for wall following behavior
+const double WallFollowKp = 3.0;     // Proportional gain - adjust this between 1-10
+const double TARGET_DISTANCE = 5.0;  // Target distance from wall (inches)
+const double DEADBAND_INNER = 4.0;   // Inner deadband boundary (inches)
+const double DEADBAND_OUTER = 6.0;   // Outer deadband boundary (inches)
+const int FOLLOW_WALL_BASE_SPEED = 300;           // Base motor speed
 
-const int WallThreshold = 30;
+// Convert inches to cm for lidar readings
+const double DEADBAND_INNER_CM = DEADBAND_INNER * 2.54;
+const double DEADBAND_OUTER_CM = DEADBAND_OUTER * 2.54;
+const double TARGET_DISTANCE_CM = TARGET_DISTANCE * 2.54;
+
+const int WALL_THRESHOLD = 30;
 const bool bangBangControllorOn = true;
-
-const double SIX_INCH = 15.24;
-const double FOUR_INCH = 10.16;
+static unsigned long previousMillis = 0;
+unsigned long sensorSampleInterval = 50;
 
 bool leftHasWall() {
-  return lidar_data.left < WallThreshold;
+  return lidar_data.left < WALL_THRESHOLD;
 }
 
 bool rightHasWall() {
-  return lidar_data.right < WallThreshold;
+  return lidar_data.right < WALL_THRESHOLD;
 }
 
 void followWallBehavior() {
@@ -956,45 +966,52 @@ void followWallBehavior() {
       // both left and right have walls
       followCenter();
       break;
-    } 
+    }
   }
 }
 
 
 void followLeft() {
-  stepperLeft.setSpeed(defaultStepSpeed);
-  stepperRight.setSpeed(defaultStepSpeed);
+  stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+  stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
 
   while (true) {
     digitalWrite(redLED, LOW);
     digitalWrite(ylwLED, LOW);
-    // keep following left wall
-    if (lidar_data.left > SIX_INCH) {
-      // if the left wall is too far away
-      digitalWrite(redLED, HIGH);
-      stepperLeft.setSpeed(defaultStepSpeed);
-      stepperRight.setSpeed(defaultStepSpeed + 20);
+    // Calculate error (how far we are from desired distance)
+    double error = lidar_data.left - TARGET_DISTANCE_CM;
 
-    } else if (lidar_data.left < FOUR_INCH) {
-      // if the left wall is too close
-      digitalWrite(ylwLED, HIGH);
-      stepperLeft.setSpeed(defaultStepSpeed + 20);
-      stepperRight.setSpeed(defaultStepSpeed);
-
+    // If within deadband, drive straight
+    if (lidar_data.left >= DEADBAND_INNER_CM && lidar_data.left <= DEADBAND_OUTER_CM) {
+      stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+      stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
     } else {
-      stepperLeft.setSpeed(defaultStepSpeed);
-      stepperRight.setSpeed(defaultStepSpeed);
+      // Calculate speed adjustment based on error
+      int speedAdjustment = (int)(WallFollowKp * error);
+
+      // If too far from wall (positive error)
+      if (error > 0) {
+        digitalWrite(redLED, HIGH);
+        // Turn towards wall - slow down right motor
+        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - speedAdjustment);
+      }
+      // If too close to wall (negative error)
+      else {
+        digitalWrite(ylwLED, HIGH);
+        // Turn away from wall - slow down left motor
+        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
+        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+      }
     }
 
     stepperLeft.runSpeed();
     stepperRight.runSpeed();
-
+    // if (isSensorTimeIntervalPassed())
     lidar_data = RPC.call("read_lidars").as<struct lidar>();
-    sonar_data = RPC.call("read_sonars").as<struct sonar>();
 
     if (rightHasWall()) {
       // both left and right have walls
-      // Serial.println("both left and right have walls");
       followCenter();
     }
 
@@ -1006,31 +1023,43 @@ void followLeft() {
 
 
 void followRight() {
-  stepperLeft.setSpeed(defaultStepSpeed);
-  stepperRight.setSpeed(defaultStepSpeed);
+  stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+  stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
   while (true) {
     digitalWrite(redLED, LOW);
     digitalWrite(ylwLED, LOW);
-    // keep following right wall
-    if (lidar_data.right > SIX_INCH) {
-      // if the right wall is too far away
-      digitalWrite(redLED, HIGH);
-      stepperLeft.setSpeed(defaultStepSpeed + 20);
-      stepperRight.setSpeed(defaultStepSpeed);
+    // Calculate error (how far we are from desired distance)
+    double error = lidar_data.right - TARGET_DISTANCE_CM;
 
-    } else if (lidar_data.right < FOUR_INCH) {
-      // if the right wall is too close
-      digitalWrite(ylwLED, HIGH);
-      stepperLeft.setSpeed(defaultStepSpeed);
-      stepperRight.setSpeed(defaultStepSpeed + 20);
-    } else {
-      stepperLeft.setSpeed(defaultStepSpeed);
-      stepperRight.setSpeed(defaultStepSpeed);
+    // If within deadband, drive straight
+    if (lidar_data.right >= DEADBAND_INNER_CM && lidar_data.right <= DEADBAND_OUTER_CM) {
+      stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+      stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+    }  // Outside deadband - apply proportional control
+    else {
+      // Calculate speed adjustment based on error
+      int speedAdjustment = (int)(WallFollowKp * error);
+
+      // If too far from wall (positive error)
+      if (error > 0) {
+        digitalWrite(redLED, HIGH);
+        // Turn towards wall - slow down left motor
+        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - speedAdjustment);
+        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+      }
+      // If too close to wall (negative error)
+      else {
+        digitalWrite(ylwLED, HIGH);
+        // Turn away from wall - slow down right motor
+        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
+      }
     }
 
     stepperLeft.runSpeed();
     stepperRight.runSpeed();
 
+    // if (isSensorTimeIntervalPassed())
     lidar_data = RPC.call("read_lidars").as<struct lidar>();
 
     if (leftHasWall()) {
@@ -1045,39 +1074,51 @@ void followRight() {
 }
 
 void followCenter() {
-  stepperLeft.setSpeed(defaultStepSpeed);
-  stepperRight.setSpeed(defaultStepSpeed);
+  stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+  stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
   while (true) {
     digitalWrite(redLED, LOW);
     digitalWrite(ylwLED, LOW);
-    // keep following center between walls
-    if (lidar_data.left > SIX_INCH && lidar_data.right < FOUR_INCH) {
-      // if the left wall is too far and the right wall is too close
-      digitalWrite(redLED, HIGH);
-      stepperLeft.setSpeed(defaultStepSpeed);
-      stepperRight.setSpeed(defaultStepSpeed + 20);
 
-    } else if (lidar_data.left < FOUR_INCH && lidar_data.right > SIX_INCH) {
-      // if the left wall is too close and the right wall is too far
-      digitalWrite(ylwLED, HIGH);
-      stepperLeft.setSpeed(defaultStepSpeed + 20);
-      stepperRight.setSpeed(defaultStepSpeed);
+    // Calculate errors for both walls
+    double errorLeft = lidar_data.left - TARGET_DISTANCE_CM;
+    double errorRight = lidar_data.right - TARGET_DISTANCE_CM;
 
-    } else {
-      stepperLeft.setSpeed(defaultStepSpeed);
-      stepperRight.setSpeed(defaultStepSpeed);
+    // Calculate center error (positive means closer to left wall)
+    double centerError = errorLeft - errorRight;
+
+    // If both within deadband, drive straight
+    if (abs(centerError) <= 1.0) {  // Small threshold for center position
+      stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+      stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
     }
 
+    // Apply proportional control to center robot
+    else {
+      int speedAdjustment = (int)(WallFollowKp * centerError);
+
+      // If closer to left wall
+      if (centerError > 0) {
+        digitalWrite(redLED, HIGH);
+        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - speedAdjustment);
+        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+      }
+      // If closer to right wall
+      else {
+        digitalWrite(ylwLED, HIGH);
+        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
+      }
+    }
     stepperLeft.runSpeed();
     stepperRight.runSpeed();
 
+    // if (isSensorTimeIntervalPassed())
     lidar_data = RPC.call("read_lidars").as<struct lidar>();
 
     if (leftHasWall() && !rightHasWall()) {
-      // Serial.println("left has wall");
       followLeft();
     } else if (!leftHasWall() && rightHasWall()) {
-      // Serial.println("right has wall");
       followRight();
     } else if (!leftHasWall() && !rightHasWall()) {
       return;
@@ -1085,6 +1126,15 @@ void followCenter() {
   }
 }
 
+
+bool isSensorTimeIntervalPassed() {
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= sensorSampleInterval) {
+    previousMillis = currentMillis;
+    return true;
+  }
+  return false;
+}
 
 
 /**
