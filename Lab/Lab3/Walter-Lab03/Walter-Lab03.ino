@@ -915,11 +915,15 @@ void moveAndFollowBehavior() {
 
 
 // Constants for wall following behavior
-const double WallFollowKp = 3.0;     // Proportional gain - adjust this between 1-10
-const double TARGET_DISTANCE = 5.0;  // Target distance from wall (inches)
-const double DEADBAND_INNER = 4.0;   // Inner deadband boundary (inches)
-const double DEADBAND_OUTER = 6.0;   // Outer deadband boundary (inches)
-const int FOLLOW_WALL_BASE_SPEED = 300;           // Base motor speed
+const double WallFollowKp = 3.0;    // Proportional gain - adjust this between 1-10
+const double WallFollowKd = 0.1;    // Derivative gain
+unsigned long lastMeasureTime = 0;  // For derivative calculation
+double lastError = 0;               // For derivative calculation
+
+const double TARGET_DISTANCE = 5.0;      // Target distance from wall (inches)
+const double DEADBAND_INNER = 4.0;       // Inner deadband boundary (inches)
+const double DEADBAND_OUTER = 6.0;       // Outer deadband boundary (inches)
+const int FOLLOW_WALL_BASE_SPEED = 300;  // Base motor speed
 
 // Convert inches to cm for lidar readings
 const double DEADBAND_INNER_CM = DEADBAND_INNER * 2.54;
@@ -928,8 +932,22 @@ const double TARGET_DISTANCE_CM = TARGET_DISTANCE * 2.54;
 
 const int WALL_THRESHOLD = 30;
 const bool bangBangControllorOn = true;
-static unsigned long previousMillis = 0;
-unsigned long sensorSampleInterval = 50;
+
+// State tracking
+enum RobotState {
+  NO_WALL,
+  FOLLOWING_LEFT,
+  FOLLOWING_RIGHT,
+  FOLLOWING_CENTER,
+  TOO_CLOSE,
+  TOO_FAR,
+  CLOSE_TO_RIGHT,
+  CLOSE_TO_LEFT,
+  TURNING_CORNER,
+  RANDOM_WANDER
+};
+
+RobotState currentState = RANDOM_WANDER;
 
 bool leftHasWall() {
   return lidar_data.left < WALL_THRESHOLD;
@@ -939,7 +957,46 @@ bool rightHasWall() {
   return lidar_data.right < WALL_THRESHOLD;
 }
 
+bool frontHasWall() {
+  return lidar_data.front < WALL_THRESHOLD;
+}
+
+bool isLeftCorner(){
+  return frontHasWall() && leftHasWall() && !rightHasWall();
+}
+
+bool isRightCorner(){
+  return frontHasWall() && rightHasWall() && !leftHasWall();
+}
+
+void updateLEDs() {
+  digitalWrite(redLED, LOW);
+  digitalWrite(ylwLED, LOW);
+  digitalWrite(grnLED, LOW);
+
+  if (currentState == FOLLOWING_RIGHT) {
+    digitalWrite(redLED, HIGH);
+    digitalWrite(ylwLED, HIGH);
+  } else if (currentState == FOLLOWING_LEFT) {
+    digitalWrite(grnLED, HIGH);
+    digitalWrite(ylwLED, HIGH);
+  } else if (currentState == FOLLOWING_CENTER) {
+    digitalWrite(redLED, HIGH);
+    digitalWrite(grnLED, HIGH);
+    digitalWrite(ylwLED, HIGH);
+  } else if (currentState == RANDOM_WANDER) {
+    digitalWrite(grnLED, HIGH);
+  } else if (currentState == TOO_CLOSE || currentState == CLOSE_TO_RIGHT) {
+    digitalWrite(ylwLED, HIGH);
+  } else if (currentState == TOO_FAR || currentState == CLOSE_TO_LEFT) {
+    digitalWrite(redLED, HIGH);
+  }
+}
+
 void followWallBehavior() {
+  currentState = RANDOM_WANDER;
+  updateLEDs();
+
   int randAngle = random(-maxTurnAngle, maxTurnAngle);
   int randDistance = random(maxDistanceMove);
   randDistance = length2Steps(randDistance);
@@ -974,12 +1031,25 @@ void followWallBehavior() {
 void followLeft() {
   stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
   stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+  currentState = FOLLOWING_LEFT;
+  updateLEDs();
+  delay(500);
 
   while (true) {
-    digitalWrite(redLED, LOW);
-    digitalWrite(ylwLED, LOW);
+    // Calculate time difference for derivative
+    unsigned long currentTime = millis();
+    double deltaTime = (currentTime - lastMeasureTime) / 1000.0;  // Convert to seconds
+
+
     // Calculate error (how far we are from desired distance)
     double error = lidar_data.left - TARGET_DISTANCE_CM;
+
+    // Calculate derivative term
+    double derivative = deltaTime > 0 ? (error - lastError) / deltaTime : 0;
+
+    // Store current values for next iteration
+    lastError = error;
+    lastMeasureTime = currentTime;
 
     // If within deadband, drive straight
     if (lidar_data.left >= DEADBAND_INNER_CM && lidar_data.left <= DEADBAND_OUTER_CM) {
@@ -987,21 +1057,25 @@ void followLeft() {
       stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
     } else {
       // Calculate speed adjustment based on error
-      int speedAdjustment = (int)(WallFollowKp * error);
+      int speedAdjustment = (int)(WallFollowKp * error + WallFollowKd * derivative);
 
       // If too far from wall (positive error)
       if (error > 0) {
-        digitalWrite(redLED, HIGH);
-        // Turn towards wall - slow down right motor
-        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
-        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - speedAdjustment);
+        currentState = TOO_FAR;
+        updateLEDs();
+
+        // Turn towards wall - slow down let motor
+        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
+        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
       }
       // If too close to wall (negative error)
       else {
-        digitalWrite(ylwLED, HIGH);
-        // Turn away from wall - slow down left motor
-        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
-        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+        currentState = TOO_CLOSE;
+        updateLEDs();
+
+        // Turn away from wall - slow down rigt motor
+        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
       }
     }
 
@@ -1015,6 +1089,10 @@ void followLeft() {
       followCenter();
     }
 
+    if(isLeftCorner()){
+      spin(TO_RIGHT, 90, defaultStepSpeed);
+    }
+
     if (!leftHasWall()) {
       return;
     }
@@ -1025,11 +1103,26 @@ void followLeft() {
 void followRight() {
   stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
   stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+
+  currentState = FOLLOWING_RIGHT;
+  updateLEDs();
+  delay(500);
+
   while (true) {
-    digitalWrite(redLED, LOW);
-    digitalWrite(ylwLED, LOW);
+
+    // Calculate time difference for derivative
+    unsigned long currentTime = millis();
+    double deltaTime = (currentTime - lastMeasureTime) / 1000.0;
+
     // Calculate error (how far we are from desired distance)
     double error = lidar_data.right - TARGET_DISTANCE_CM;
+
+    // Calculate derivative term
+    double derivative = deltaTime > 0 ? (error - lastError) / deltaTime : 0;
+
+    // Store current values for next iteration
+    lastError = error;
+    lastMeasureTime = currentTime;
 
     // If within deadband, drive straight
     if (lidar_data.right >= DEADBAND_INNER_CM && lidar_data.right <= DEADBAND_OUTER_CM) {
@@ -1038,21 +1131,23 @@ void followRight() {
     }  // Outside deadband - apply proportional control
     else {
       // Calculate speed adjustment based on error
-      int speedAdjustment = (int)(WallFollowKp * error);
+      int speedAdjustment = (int)(WallFollowKp * error + WallFollowKd * derivative);
 
       // If too far from wall (positive error)
       if (error > 0) {
-        digitalWrite(redLED, HIGH);
-        // Turn towards wall - slow down left motor
-        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - speedAdjustment);
-        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+        currentState = TOO_FAR;
+        updateLEDs();
+        // Turn towards wall - slow down right motor
+        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
       }
       // If too close to wall (negative error)
       else {
-        digitalWrite(ylwLED, HIGH);
-        // Turn away from wall - slow down right motor
-        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
-        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
+        currentState = TOO_CLOSE;
+        updateLEDs();
+        // Turn away from wall - slow down left motor
+        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
+        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
       }
     }
 
@@ -1067,6 +1162,10 @@ void followRight() {
       followCenter();
     }
 
+    if(isRightCorner()){
+      spin(TO_LEFT, 90, defaultStepSpeed);
+    }
+
     if (!rightHasWall()) {
       return;
     }
@@ -1076,9 +1175,15 @@ void followRight() {
 void followCenter() {
   stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
   stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+  currentState = FOLLOWING_CENTER;
+  updateLEDs();
+  delay(500);
+
   while (true) {
-    digitalWrite(redLED, LOW);
-    digitalWrite(ylwLED, LOW);
+
+    // Calculate time difference for derivative
+    unsigned long currentTime = millis();
+    double deltaTime = (currentTime - lastMeasureTime) / 1000.0;
 
     // Calculate errors for both walls
     double errorLeft = lidar_data.left - TARGET_DISTANCE_CM;
@@ -1086,6 +1191,13 @@ void followCenter() {
 
     // Calculate center error (positive means closer to left wall)
     double centerError = errorLeft - errorRight;
+
+    // Calculate derivative term
+    double derivative = deltaTime > 0 ? (centerError - lastError) / deltaTime : 0;
+
+    // Store current values for next iteration
+    lastError = centerError;
+    lastMeasureTime = currentTime;
 
     // If both within deadband, drive straight
     if (abs(centerError) <= 1.0) {  // Small threshold for center position
@@ -1095,17 +1207,19 @@ void followCenter() {
 
     // Apply proportional control to center robot
     else {
-      int speedAdjustment = (int)(WallFollowKp * centerError);
+      int speedAdjustment = (int)(WallFollowKp * centerError + WallFollowKd * derivative);
 
-      // If closer to left wall
+      // If closer to right wall
       if (centerError > 0) {
-        digitalWrite(redLED, HIGH);
-        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - speedAdjustment);
+        currentState = CLOSE_TO_RIGHT;
+        updateLEDs();
+        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
         stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
       }
-      // If closer to right wall
+      // If closer to left wall
       else {
-        digitalWrite(ylwLED, HIGH);
+        currentState = CLOSE_TO_LEFT;
+        updateLEDs();
         stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
         stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
       }
@@ -1125,17 +1239,6 @@ void followCenter() {
     }
   }
 }
-
-
-bool isSensorTimeIntervalPassed() {
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= sensorSampleInterval) {
-    previousMillis = currentMillis;
-    return true;
-  }
-  return false;
-}
-
 
 /**
  * @brief Initializes the stepper motor and sets up interrupts for the left and right wheel encoders.
