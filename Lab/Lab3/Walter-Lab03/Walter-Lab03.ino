@@ -77,68 +77,67 @@
 */
 
 // includew all necessary libraries
-#include <Arduino.h>      //include for PlatformIO Ide
-#include <AccelStepper.h> //include the stepper motor library
-#include <MultiStepper.h> //include multiple stepper motor library
+#include <Arduino.h>       //include for PlatformIO Ide
+#include <AccelStepper.h>  //include the stepper motor library
+#include <MultiStepper.h>  //include multiple stepper motor library
 #include <math.h>
 #include "RPC.h"
 
 // state LEDs connections
-#define redLED 5         // red LED for displaying states
-#define grnLED 6         // green LED for displaying states
-#define ylwLED 7         // yellow LED for displaying states
-#define enableLED 13     // stepper enabled LED
-int leds[3] = {5, 6, 7}; // array of LED pin numbers
+#define redLED 5            // red LED for displaying states
+#define grnLED 6            // green LED for displaying states
+#define ylwLED 7            // yellow LED for displaying states
+#define enableLED 13        // stepper enabled LED
+int leds[3] = { 5, 6, 7 };  // array of LED pin numbers
 
 // define motor pin numbers
-#define stepperEnable 48 // stepper enable pin on stepStick
-#define rtStepPin 50     // right stepper motor step pin
-#define rtDirPin 51      // right stepper motor direction pin
-#define ltStepPin 52     // left stepper motor step pin
-#define ltDirPin 53      // left stepper motor direction pin
+#define stepperEnable 48  // stepper enable pin on stepStick
+#define rtStepPin 50      // right stepper motor step pin
+#define rtDirPin 51       // right stepper motor direction pin
+#define ltStepPin 52      // left stepper motor step pin
+#define ltDirPin 53       // left stepper motor direction pin
 
-AccelStepper stepperRight(AccelStepper::DRIVER, rtStepPin, rtDirPin); // create instance of right stepper motor object (2 driver pins, low to high transition step pin 52, direction input pin 53 (high means forward)
-AccelStepper stepperLeft(AccelStepper::DRIVER, ltStepPin, ltDirPin);  // create instance of left stepper motor object (2 driver pins, step pin 50, direction input pin 51)
-MultiStepper steppers;                                                // create instance to control multiple steppers at the same time
+AccelStepper stepperRight(AccelStepper::DRIVER, rtStepPin, rtDirPin);  // create instance of right stepper motor object (2 driver pins, low to high transition step pin 52, direction input pin 53 (high means forward)
+AccelStepper stepperLeft(AccelStepper::DRIVER, ltStepPin, ltDirPin);   // create instance of left stepper motor object (2 driver pins, step pin 50, direction input pin 51)
+MultiStepper steppers;                                                 // create instance to control multiple steppers at the same time
 
-#define stepperEnTrue false // variable for enabling stepper motor
-#define stepperEnFalse true // variable for disabling stepper motor
-#define max_speed 1500      // maximum stepper motor speed
-#define max_accel 10000     // maximum motor acceleration
+#define stepperEnTrue false  // variable for enabling stepper motor
+#define stepperEnFalse true  // variable for disabling stepper motor
+#define max_speed 1500       // maximum stepper motor speed
+#define max_accel 10000      // maximum motor acceleration
 
-int pauseTime = 2500; // time before robot moves
-int stepTime = 500;   // delay time between high and low on step pin
-int wait_time = 1000; // delay for printing data
+int pauseTime = 2500;  // time before robot moves
+int stepTime = 500;    // delay time between high and low on step pin
+int wait_time = 1000;  // delay for printing data
 
 // define encoder pins
-#define LEFT 0                     // left encoder
-#define RIGHT 1                    // right encoder
-const int ltEncoder = 18;          // left encoder pin (Mega Interrupt pins 2,3 18,19,20,21)
-const int rtEncoder = 19;          // right encoder pin (Mega Interrupt pins 2,3 18,19,20,21)
-volatile long encoder[2] = {0, 0}; // interrupt variable to hold number of encoder counts (left, right)
-int lastSpeed[2] = {0, 0};         // variable to hold encoder speed (left, right)
-int accumTicks[2] = {0, 0};        // variable to hold accumulated ticks since last reset
+#define LEFT 0                        // left encoder
+#define RIGHT 1                       // right encoder
+const int ltEncoder = 18;             // left encoder pin (Mega Interrupt pins 2,3 18,19,20,21)
+const int rtEncoder = 19;             // right encoder pin (Mega Interrupt pins 2,3 18,19,20,21)
+volatile long encoder[2] = { 0, 0 };  // interrupt variable to hold number of encoder counts (left, right)
+int lastSpeed[2] = { 0, 0 };          // variable to hold encoder speed (left, right)
+int accumTicks[2] = { 0, 0 };         // variable to hold accumulated ticks since last reset
 
-#define TO_LEFT -1 // direction variables to left
-#define TO_RIGHT 1 // direction variables to right
+#define TO_LEFT -1  // direction variables to left
+#define TO_RIGHT 1  // direction variables to right
 
-#define CLOCKWISE 1         // direction variables for clockwise motion
-#define COUNTERCLOCKWISE -1 // direction variables for counterclockwise motion
+#define CLOCKWISE 1          // direction variables for clockwise motion
+#define COUNTERCLOCKWISE -1  // direction variables for counterclockwise motion
 
 // Helper Functions
-const float pi = 3.14159;         // pi
-const float wheelRadius = 1.7;    // robot wheel radius in inches
-const int stepsPerRevol = 800;    // robot wheel steps per revolution
-const float robotWidth = 9.0;     // robot width in inches
-const int defaultStepSpeed = 200; // robot default speed in steps per second
+const float pi = 3.14159;          // pi
+const float wheelRadius = 1.7;     // robot wheel radius in inches
+const int stepsPerRevol = 800;     // robot wheel steps per revolution
+const float robotWidth = 9.0;      // robot width in inches
+const int defaultStepSpeed = 200;  // robot default speed in steps per second
 
-const int PIDThreshold = 50; // PID threshold
-const int PIDkp = 1;         // PID proportional gain
-const int encoderRatio = 20; // ratio between the encoder ticks and steps
+const int PIDThreshold = 50;  // PID threshold
+const int PIDkp = 1;          // PID proportional gain
+const int encoderRatio = 20;  // ratio between the encoder ticks and steps
 
 // State tracking
-enum RobotState
-{
+enum RobotState {
   NO_WALL,
   FOLLOWING_LEFT,
   FOLLOWING_RIGHT,
@@ -150,68 +149,52 @@ enum RobotState
   TURNING_CORNER,
   RANDOM_WANDER,
   INSIDE_CORNER,
+  OUTSIDE_CORNER,
   COLLIDE_BEHAVIOR,
   RUNAWAY_BEHAVIOR,
   FOLLOW_BEHAVIOR,
+  INSIDE_DEADBAND,
 };
 
-void updateLEDs()
-{
+RobotState currentState;
+
+void updateLEDs() {
   digitalWrite(redLED, LOW);
   digitalWrite(ylwLED, LOW);
   digitalWrite(grnLED, LOW);
 
-  if (currentState == FOLLOWING_RIGHT)
-  {
+  if (currentState == FOLLOWING_RIGHT) {
     digitalWrite(redLED, HIGH);
     digitalWrite(ylwLED, HIGH);
-  }
-  else if (currentState == FOLLOWING_LEFT)
-  {
+  } else if (currentState == FOLLOWING_LEFT) {
     digitalWrite(grnLED, HIGH);
     digitalWrite(ylwLED, HIGH);
-  }
-  else if (currentState == FOLLOWING_CENTER)
-  {
+  } else if (currentState == FOLLOWING_CENTER) {
     digitalWrite(redLED, HIGH);
     digitalWrite(grnLED, HIGH);
     digitalWrite(ylwLED, HIGH);
-  }
-  else if (currentState == RANDOM_WANDER)
-  {
+  } else if (currentState == RANDOM_WANDER) {
     digitalWrite(grnLED, HIGH);
-  }
-  else if (currentState == TOO_CLOSE || currentState == CLOSE_TO_RIGHT)
-  {
+  } else if (currentState == TOO_CLOSE || currentState == CLOSE_TO_RIGHT) {
     digitalWrite(ylwLED, HIGH);
-  }
-  else if (currentState == TOO_FAR || currentState == CLOSE_TO_LEFT)
-  {
+  } else if (currentState == TOO_FAR || currentState == CLOSE_TO_LEFT) {
     digitalWrite(redLED, HIGH);
-  }
-  else if (currentState == INSIDE_CORNER)
-  {
+  } else if (currentState == INSIDE_CORNER) {
     digitalWrite(redLED, HIGH);
     digitalWrite(grnLED, HIGH);
-  }
-  else if (currentState == COLLIDE_BEHAVIOR)
-  {
+  } else if (currentState == COLLIDE_BEHAVIOR) {
     digitalWrite(redLED, HIGH);
-  }
-  else if (currentState == RUNAWAY_BEHAVIOR)
-  {
+  } else if (currentState == RUNAWAY_BEHAVIOR) {
     digitalWrite(ylwLED, HIGH);
-  }
-  else if (currentState == FOLLOW_BEHAVIOR)
-  {
+  } else if (currentState == FOLLOW_BEHAVIOR) {
     digitalWrite(redLED, HIGH);
     digitalWrite(grnLED, HIGH);
   }
 }
 
 // random move maximum values
-const int maxTurnAngle = 90;      // Maximum turn angle in degrees
-const int maxDistanceMove = 12.0; // Maximum move distance in inches
+const int maxTurnAngle = 90;       // Maximum turn angle in degrees
+const int maxDistanceMove = 12.0;  // Maximum move distance in inches
 
 // lidar constant values
 #define FRONT 0
@@ -226,7 +209,7 @@ int16_t bk_lidar = 9;
 int16_t lt_lidar = 10;
 int16_t rt_lidar = 11;
 
-int16_t lidar_pins[4] = {8, 9, 10, 11};
+int16_t lidar_pins[4] = { 8, 9, 10, 11 };
 
 int16_t leftSnr = 3;
 int16_t rightSnr = 4;
@@ -234,37 +217,33 @@ int16_t rightSnr = 4;
 const int MAX_LIDAR_DISTANCE = 40;
 
 // Check for obstacles - adjust these thresholds based on your needs
-const int OBSTACLE_THRESHOLD = 10; // centimeters
+const int OBSTACLE_THRESHOLD = 10;  // centimeters
 
 // a struct to hold lidar data
-struct lidar
-{
+struct lidar {
   // this can easily be extended to contain sonar data as well
   int front;
   int back;
   int left;
   int right;
   // this defines some helper functions that allow RPC to send our struct (I found this on a random forum)
-  MSGPACK_DEFINE_ARRAY(front, back, left, right); // https://stackoverflow.com/questions/37322145/msgpack-to-pack-structures https://www.appsloveworld.com/cplus/100/391/msgpack-to-pack-structures
+  MSGPACK_DEFINE_ARRAY(front, back, left, right);  // https://stackoverflow.com/questions/37322145/msgpack-to-pack-structures https://www.appsloveworld.com/cplus/100/391/msgpack-to-pack-structures
 } lidarData;
 
-struct lidar read_lidars()
-{
+struct lidar read_lidars() {
   return lidarData;
 }
 
 // a struct to hold sonar data
-struct sonar
-{
+struct sonar {
   // this can easily be extended to contain sonar data as well
   int left;
   int right;
   // this defines some helper functions that allow RPC to send our struct (I found this on a random forum)
-  MSGPACK_DEFINE_ARRAY(left, right); // https://stackoverflow.com/questions/37322145/msgpack-to-pack-structures https://www.appsloveworld.com/cplus/100/391/msgpack-to-pack-structures
+  MSGPACK_DEFINE_ARRAY(left, right);  // https://stackoverflow.com/questions/37322145/msgpack-to-pack-structures https://www.appsloveworld.com/cplus/100/391/msgpack-to-pack-structures
 } sonarData;
 
-struct sonar read_sonars()
-{
+struct sonar read_sonars() {
   return sonarData;
 }
 
@@ -272,67 +251,60 @@ struct lidar lidar_data;
 struct sonar sonar_data;
 
 // interrupt function to count left encoder tickes
-void LwheelSpeed()
-{
-  encoder[LEFT]++; // count the left wheel encoder interrupts
+void LwheelSpeed() {
+  encoder[LEFT]++;  // count the left wheel encoder interrupts
 }
 
 // interrupt function to count right encoder ticks
-void RwheelSpeed()
-{
-  encoder[RIGHT]++; // count the right wheel encoder interrupts
+void RwheelSpeed() {
+  encoder[RIGHT]++;  // count the right wheel encoder interrupts
 }
 
-void allOFF()
-{
-  for (int i = 0; i < 3; i++)
-  {
+void allOFF() {
+  for (int i = 0; i < 3; i++) {
     digitalWrite(leds[i], LOW);
   }
 }
 
 // function to set all stepper motor variables, outputs and LEDs
-void init_stepper()
-{
-  pinMode(rtStepPin, OUTPUT);                  // sets pin as output
-  pinMode(rtDirPin, OUTPUT);                   // sets pin as output
-  pinMode(ltStepPin, OUTPUT);                  // sets pin as output
-  pinMode(ltDirPin, OUTPUT);                   // sets pin as output
-  pinMode(stepperEnable, OUTPUT);              // sets pin as output
-  digitalWrite(stepperEnable, stepperEnFalse); // turns off the stepper motor driver
-  pinMode(enableLED, OUTPUT);                  // set enable LED as output
-  digitalWrite(enableLED, LOW);                // turn off enable LED
-  pinMode(redLED, OUTPUT);                     // set red LED as output
-  pinMode(grnLED, OUTPUT);                     // set green LED as output
-  pinMode(ylwLED, OUTPUT);                     // set yellow LED as output
-  digitalWrite(redLED, HIGH);                  // turn on red LED
-  digitalWrite(ylwLED, HIGH);                  // turn on yellow LED
-  digitalWrite(grnLED, HIGH);                  // turn on green LED
-  delay(pauseTime / 5);                        // wait 0.5 seconds
-  digitalWrite(redLED, LOW);                   // turn off red LED
-  digitalWrite(ylwLED, LOW);                   // turn off yellow LED
-  digitalWrite(grnLED, LOW);                   // turn off green LED
+void init_stepper() {
+  pinMode(rtStepPin, OUTPUT);                   // sets pin as output
+  pinMode(rtDirPin, OUTPUT);                    // sets pin as output
+  pinMode(ltStepPin, OUTPUT);                   // sets pin as output
+  pinMode(ltDirPin, OUTPUT);                    // sets pin as output
+  pinMode(stepperEnable, OUTPUT);               // sets pin as output
+  digitalWrite(stepperEnable, stepperEnFalse);  // turns off the stepper motor driver
+  pinMode(enableLED, OUTPUT);                   // set enable LED as output
+  digitalWrite(enableLED, LOW);                 // turn off enable LED
+  pinMode(redLED, OUTPUT);                      // set red LED as output
+  pinMode(grnLED, OUTPUT);                      // set green LED as output
+  pinMode(ylwLED, OUTPUT);                      // set yellow LED as output
+  digitalWrite(redLED, HIGH);                   // turn on red LED
+  digitalWrite(ylwLED, HIGH);                   // turn on yellow LED
+  digitalWrite(grnLED, HIGH);                   // turn on green LED
+  delay(pauseTime / 5);                         // wait 0.5 seconds
+  digitalWrite(redLED, LOW);                    // turn off red LED
+  digitalWrite(ylwLED, LOW);                    // turn off yellow LED
+  digitalWrite(grnLED, LOW);                    // turn off green LED
 
-  stepperRight.setMaxSpeed(max_speed);        // set the maximum permitted speed limited by processor and clock speed, no greater than 4000 steps/sec on Arduino
-  stepperRight.setAcceleration(max_accel);    // set desired acceleration in steps/s^2
-  stepperLeft.setMaxSpeed(max_speed);         // set the maximum permitted speed limited by processor and clock speed, no greater than 4000 steps/sec on Arduino
-  stepperLeft.setAcceleration(max_accel);     // set desired acceleration in steps/s^2
-  steppers.addStepper(stepperRight);          // add right motor to MultiStepper
-  steppers.addStepper(stepperLeft);           // add left motor to MultiStepper
-  digitalWrite(stepperEnable, stepperEnTrue); // turns on the stepper motor driver
-  digitalWrite(enableLED, HIGH);              // turn on enable LED
+  stepperRight.setMaxSpeed(max_speed);         // set the maximum permitted speed limited by processor and clock speed, no greater than 4000 steps/sec on Arduino
+  stepperRight.setAcceleration(max_accel);     // set desired acceleration in steps/s^2
+  stepperLeft.setMaxSpeed(max_speed);          // set the maximum permitted speed limited by processor and clock speed, no greater than 4000 steps/sec on Arduino
+  stepperLeft.setAcceleration(max_accel);      // set desired acceleration in steps/s^2
+  steppers.addStepper(stepperRight);           // add right motor to MultiStepper
+  steppers.addStepper(stepperLeft);            // add left motor to MultiStepper
+  digitalWrite(stepperEnable, stepperEnTrue);  // turns on the stepper motor driver
+  digitalWrite(enableLED, HIGH);               // turn on enable LED
 }
 
 // function prints encoder data to serial monitor
-void print_encoder_data()
-{
-  static unsigned long timer = 0; // print manager timer
-  if (millis() - timer > 100)
-  {                                                         // print encoder data every 100 ms or so
-    lastSpeed[LEFT] = encoder[LEFT];                        // record the latest left speed value
-    lastSpeed[RIGHT] = encoder[RIGHT];                      // record the latest right speed value
-    accumTicks[LEFT] = accumTicks[LEFT] + encoder[LEFT];    // record accumulated left ticks
-    accumTicks[RIGHT] = accumTicks[RIGHT] + encoder[RIGHT]; // record accumulated right ticks
+void print_encoder_data() {
+  static unsigned long timer = 0;                            // print manager timer
+  if (millis() - timer > 100) {                              // print encoder data every 100 ms or so
+    lastSpeed[LEFT] = encoder[LEFT];                         // record the latest left speed value
+    lastSpeed[RIGHT] = encoder[RIGHT];                       // record the latest right speed value
+    accumTicks[LEFT] = accumTicks[LEFT] + encoder[LEFT];     // record accumulated left ticks
+    accumTicks[RIGHT] = accumTicks[RIGHT] + encoder[RIGHT];  // record accumulated right ticks
     Serial.println("Encoder value:");
     Serial.print("\tLeft:\t");
     Serial.print(encoder[LEFT]);
@@ -343,24 +315,22 @@ void print_encoder_data()
     Serial.print(accumTicks[LEFT]);
     Serial.print("\tRight:\t");
     Serial.println(accumTicks[RIGHT]);
-    encoder[LEFT] = 0;  // clear the left encoder data buffer
-    encoder[RIGHT] = 0; // clear the right encoder data buffer
-    timer = millis();   // record current time since program started
+    encoder[LEFT] = 0;   // clear the left encoder data buffer
+    encoder[RIGHT] = 0;  // clear the right encoder data buffer
+    timer = millis();    // record current time since program started
   }
 }
 
 /*this function will reset the encoders*/
-void resetEncoder()
-{
-  encoder[LEFT] = 0;  // clear the left encoder data buffer
-  encoder[RIGHT] = 0; // clear the right encoder data buffer
+void resetEncoder() {
+  encoder[LEFT] = 0;   // clear the left encoder data buffer
+  encoder[RIGHT] = 0;  // clear the right encoder data buffer
 }
 
 /*this function will stop the steppers*/
-void stopMove()
-{
-  stepperRight.stop(); // Stop right motor
-  stepperLeft.stop();  // Stop left motor
+void stopMove() {
+  stepperRight.stop();  // Stop right motor
+  stepperLeft.stop();   // Stop left motor
 }
 
 /*
@@ -373,25 +343,21 @@ void stopMove()
   and sets the wheel speeds accordingly. The steppers are then run to the computed positions.
   If the error is within a specified threshold, the function stops the steppers.
 */
-void PIDControl(int leftDistance, int rightDistance)
-{
+void PIDControl(int leftDistance, int rightDistance) {
   // Calculate the error between the target and actual encoder values
   long leftDistanceError = abs(leftDistance) - encoder[LEFT] * encoderRatio;
   long rightDistanceError = abs(rightDistance) - encoder[RIGHT] * encoderRatio;
 
   // Apply proportional control
-  if (abs(leftDistanceError) > PIDThreshold || abs(rightDistanceError) > PIDThreshold)
-  {
+  if (abs(leftDistanceError) > PIDThreshold || abs(rightDistanceError) > PIDThreshold) {
     long outputLeft = leftDistanceError * PIDkp;
     long outputRight = rightDistanceError * PIDkp;
 
     // Set the wheel speeds
-    if (leftDistanceError < 0)
-    {
+    if (leftDistanceError < 0) {
       stepperLeft.setSpeed(-stepperLeft.speed());
     }
-    if (rightDistanceError < 0)
-    {
+    if (rightDistanceError < 0) {
       stepperRight.setSpeed(-stepperRight.speed());
     }
 
@@ -409,8 +375,7 @@ void PIDControl(int leftDistance, int rightDistance)
  * @return the number of steps for the robot to move the given length
  */
 
-int length2Steps(double length)
-{
+int length2Steps(double length) {
   return round(stepsPerRevol * length / (2 * pi * wheelRadius));
 }
 
@@ -420,8 +385,7 @@ int length2Steps(double length)
  * @param angle the angle of the spin in degrees
  * @param speed the speed of the spin in steps per second
  */
-void spin(int direction, double angle, int speed)
-{
+void spin(int direction, double angle, int speed) {
   if (direction != TO_LEFT && direction != TO_RIGHT && angle < 0)
     return;
   resetEncoder();
@@ -430,16 +394,13 @@ void spin(int direction, double angle, int speed)
   double stepperMoveLength = pi * robotWidth * angle / 360;
   int stepperMovePos = length2Steps(stepperMoveLength);
 
-  if (direction == TO_RIGHT)
-  {
+  if (direction == TO_RIGHT) {
     stepperLeft.move(stepperMovePos);
     stepperLeft.setSpeed(speed);
 
     stepperRight.move(-stepperMovePos);
     stepperRight.setSpeed(-speed);
-  }
-  else if (direction == TO_LEFT)
-  {
+  } else if (direction == TO_LEFT) {
     stepperLeft.move(-stepperMovePos);
     stepperLeft.setSpeed(-speed);
 
@@ -450,12 +411,9 @@ void spin(int direction, double angle, int speed)
   steppers.runSpeedToPosition();
 
   // use Encoder PID Control
-  if (direction == TO_RIGHT)
-  {
+  if (direction == TO_RIGHT) {
     PIDControl(stepperMovePos, -stepperMovePos);
-  }
-  else if (direction == TO_LEFT)
-  {
+  } else if (direction == TO_LEFT) {
     PIDControl(-stepperMovePos, stepperMovePos);
   }
 }
@@ -465,18 +423,17 @@ void spin(int direction, double angle, int speed)
  * @param distance the distance in inches to move the robot
  * @param speed the speed in steps per second to move the robot
  */
-void forward(double distance, int speed)
-{
+void forward(double distance, int speed) {
   resetEncoder();
   int stepperMovePos = length2Steps(distance);
   stepperLeft.setCurrentPosition(0);
   stepperRight.setCurrentPosition(0);
 
-  stepperLeft.move(stepperMovePos);  // move left wheel to relative position
-  stepperRight.move(stepperMovePos); // move right wheel to relative position
+  stepperLeft.move(stepperMovePos);   // move left wheel to relative position
+  stepperRight.move(stepperMovePos);  // move right wheel to relative position
 
-  stepperLeft.setSpeed(speed);  // set left motor speed
-  stepperRight.setSpeed(speed); // set right motor spee
+  stepperLeft.setSpeed(speed);   // set left motor speed
+  stepperRight.setSpeed(speed);  // set right motor spee
   steppers.runSpeedToPosition();
 
   PIDControl(stepperMovePos, stepperMovePos);
@@ -489,8 +446,7 @@ void forward(double distance, int speed)
  * The function calls the forward() function with negative values of distance and speed.
  */
 
-void reverse(double distance, int speed)
-{
+void reverse(double distance, int speed) {
   forward(-distance, -speed);
 }
 
@@ -499,24 +455,18 @@ void reverse(double distance, int speed)
  * @param angle the absolute angle to turn to in degrees
  * @note Positive angles are to the left, negative angles are to the right
  */
-void goToAngle(double angle)
-{
+void goToAngle(double angle) {
   // Serial.println("goToAngle function");
 
   // digitalWrite(grnLED, HIGH);  //turn on green LED
   // if angle larger than 0, turn left
   // if angle less than 0, turn right
   int direction = 0;
-  if (angle > 0)
-  {
+  if (angle > 0) {
     direction = TO_LEFT;
-  }
-  else if (angle < 0)
-  {
+  } else if (angle < 0) {
     direction = TO_RIGHT;
-  }
-  else
-  {
+  } else {
     return;
   }
   angle = abs(angle);
@@ -533,26 +483,18 @@ void goToAngle(double angle)
  * @param y The y-coordinate.
  * @return The turn angle in degrees.
  */
-double getTurnAngle(double x, double y)
-{
+double getTurnAngle(double x, double y) {
   double angleRadian = atan(y / x);
 
   double angleDegree = angleRadian * 180.0 / pi;
 
-  if (x > 0 && y > 0)
-  {
+  if (x > 0 && y > 0) {
     angleDegree = angleDegree;
-  }
-  else if (x < 0 && y >= 0)
-  {
+  } else if (x < 0 && y >= 0) {
     angleDegree = 180 + angleDegree;
-  }
-  else if (x < 0 && y < 0)
-  {
+  } else if (x < 0 && y < 0) {
     angleDegree = 180 + angleDegree;
-  }
-  else if (x > 0 && y < 0)
-  {
+  } else if (x > 0 && y < 0) {
     angleDegree = angleDegree;
   }
 
@@ -565,12 +507,11 @@ double getTurnAngle(double x, double y)
  * @param y the y-coordinate of the goal in inches
  * @note The robot will first turn to the correct angle, then move forward to the goal
  */
-void goToGoal(double x, double y)
-{
+void goToGoal(double x, double y) {
   // Serial.println("goToGoal function");
-  digitalWrite(redLED, LOW);  // turn off red LED
-  digitalWrite(grnLED, HIGH); // turn on green LED
-  digitalWrite(ylwLED, HIGH); // turn on yellow LED
+  digitalWrite(redLED, LOW);   // turn off red LED
+  digitalWrite(grnLED, HIGH);  // turn on green LED
+  digitalWrite(ylwLED, HIGH);  // turn on yellow LED
 
   double distance = sqrt(pow(x, 2) + pow(y, 2));
   double angleDegree = getTurnAngle(x, y);
@@ -589,8 +530,7 @@ void goToGoal(double x, double y)
  * @param timeDelay the time in seconds to move each wheel
  * @param velocityDiff the difference in speed between the two wheels
  */
-void turn(int direction, double timeDelay, int velocityDiff)
-{
+void turn(int direction, double timeDelay, int velocityDiff) {
   if (direction != TO_LEFT && direction != TO_RIGHT)
     return;
   int speedHigh = 500 + velocityDiff;
@@ -600,19 +540,16 @@ void turn(int direction, double timeDelay, int velocityDiff)
   int distanceShort = round(speedLow * timeDelay);
   int distanceLong = round(speedHigh * timeDelay);
 
-  if (direction == TO_RIGHT)
-  {
+  if (direction == TO_RIGHT) {
     stepperLeft.move(distanceLong);
-    stepperLeft.setSpeed(speedHigh); // set left motor speed
+    stepperLeft.setSpeed(speedHigh);  // set left motor speed
     stepperRight.move(distanceShort);
-    stepperRight.setSpeed(speedLow); // set right motor speed
-  }
-  else if (direction == TO_LEFT)
-  {
+    stepperRight.setSpeed(speedLow);  // set right motor speed
+  } else if (direction == TO_LEFT) {
     stepperLeft.move(distanceShort);
-    stepperLeft.setSpeed(speedLow); // set left motor speed
+    stepperLeft.setSpeed(speedLow);  // set left motor speed
     stepperRight.move(distanceLong);
-    stepperRight.setSpeed(speedHigh); // set right motor speed
+    stepperRight.setSpeed(speedHigh);  // set right motor speed
   }
 
   steppers.runSpeedToPosition();
@@ -623,8 +560,7 @@ void turn(int direction, double timeDelay, int velocityDiff)
  * @param randAngle the random angle generated
  * @param randDistance the random distance generated
  */
-void printRandomValues(int randAngle, int randDistance)
-{
+void printRandomValues(int randAngle, int randDistance) {
   Serial.print("Random Values:\n\tAngle: ");
   Serial.print(randAngle);
   Serial.print("\tDistance: ");
@@ -635,8 +571,7 @@ void printRandomValues(int randAngle, int randDistance)
  * Generates a random angle and distance for the robot to move.
  * The robot will turn to the random angle, then move forward the random distance.
  */
-void randomWander()
-{
+void randomWander() {
   currentState = RANDOM_WANDER;
   updateLEDs();
 
@@ -654,47 +589,42 @@ void randomWander()
 }
 
 // reads a lidar given a pin
-int read_lidar(int pin)
-{
+int read_lidar(int pin) {
   // Wait for pulse
   int16_t t = pulseIn(pin, HIGH);
 
-  int d = MAX_LIDAR_DISTANCE; // Default to "no object"
-  if (t != 0 && t <= 1850)
-  {
+  int d = MAX_LIDAR_DISTANCE;  // Default to "no object"
+  if (t != 0 && t <= 1850) {
     d = (t - 1000) * 3 / 40;
     if (d < 0)
       d = 0;
   }
 
-  delay(10); // More stable than delayMicroseconds
+  delay(10);  // More stable than delayMicroseconds
   return d;
 }
 
 // reads a sonar given a pin
-int read_sonar(int pin)
-{
+int read_sonar(int pin) {
   float velocity((331.5 + 0.6 * (float)(20)) * 100 / 1000000.0);
   uint16_t distance, pulseWidthUs;
 
   pinMode(pin, OUTPUT);
   digitalWrite(pin, LOW);
-  digitalWrite(pin, HIGH);           // Set the trig pin High
-  delayMicroseconds(10);             // Delay of 10 microseconds
-  digitalWrite(pin, LOW);            // Set the trig pin Low
-  pinMode(pin, INPUT);               // Set the pin to input mode
-  pulseWidthUs = pulseIn(pin, HIGH); // Detect the high level time on the echo pin, the output high level time represents the ultrasonic flight time (unit: us)
+  digitalWrite(pin, HIGH);            // Set the trig pin High
+  delayMicroseconds(10);              // Delay of 10 microseconds
+  digitalWrite(pin, LOW);             // Set the trig pin Low
+  pinMode(pin, INPUT);                // Set the pin to input mode
+  pulseWidthUs = pulseIn(pin, HIGH);  // Detect the high level time on the echo pin, the output high level time represents the ultrasonic flight time (unit: us)
   distance = pulseWidthUs * velocity / 2.0;
-  if (distance < 0 || distance > 50)
-  {
+  if (distance < 0 || distance > 50) {
     distance = 0;
   }
   return distance;
 }
 
 // prints the sensor data
-void print_sensor_data(struct lidar data, struct sonar data2)
-{
+void print_sensor_data(struct lidar data, struct sonar data2) {
   Serial.print("lidar: ");
   Serial.print(data.front);
   Serial.print(", ");
@@ -712,23 +642,20 @@ void print_sensor_data(struct lidar data, struct sonar data2)
 }
 
 // converts cm to inches
-double cm2inch(int cm)
-{
+double cm2inch(int cm) {
   return 0.393701 * cm;
 }
 
 // collide behavior
-void collideBehavior()
-{
+void collideBehavior() {
   currentState = COLLIDE_BEHAVIOR;
   updateLEDs();
   stopMove();
-  delay(50); // Small delay to prevent CPU hogging
+  delay(50);  // Small delay to prevent CPU hogging
 }
 
 // check if there is an obstacle around the robot
-bool isCloseObstacle()
-{
+bool isCloseObstacle() {
   // Read sensor data
   lidar_data = RPC.call("read_lidars").as<struct lidar>();
   sonar_data = RPC.call("read_sonars").as<struct sonar>();
@@ -740,33 +667,28 @@ bool isCloseObstacle()
 }
 
 // check if there is an obstacle in front of the robot
-bool checkFrontObstacle()
-{
+bool checkFrontObstacle() {
   lidar_data = RPC.call("read_lidars").as<struct lidar>();
   return frontHasObstacle();
 }
 
 // check if there is an obstacle in the front of the robot
-bool frontHasObstacle()
-{
+bool frontHasObstacle() {
   return lidar_data.front < OBSTACLE_THRESHOLD;
 }
 
 // check if there is an obstacle in the back of the robot
-bool backHasObstacle()
-{
+bool backHasObstacle() {
   return lidar_data.back < OBSTACLE_THRESHOLD;
 }
 
 // check if there is an obstacle on the left of the robot
-bool leftHasObstacle()
-{
+bool leftHasObstacle() {
   return lidar_data.left < OBSTACLE_THRESHOLD;
 }
 
 // check if there is an obstacle on the right of the robot
-bool rightHasObstacle()
-{
+bool rightHasObstacle() {
   return lidar_data.right < OBSTACLE_THRESHOLD;
 }
 
@@ -798,8 +720,7 @@ const int forwardDistance = 10;
  * - forward(double distance, int speed): Moves the robot forward by the specified distance at the given speed.
  * - stopMove(): Stops the robot's movement.
  */
-void runawayBehavior()
-{
+void runawayBehavior() {
   currentState = RUNAWAY_BEHAVIOR;
   updateLEDs();
 
@@ -815,34 +736,22 @@ void runawayBehavior()
 
   double turnAngle = 0;
 
-  if (!frontHasObstacle() && !backHasObstacle() && leftHasObstacle() && rightHasObstacle())
-  {
+  if (!frontHasObstacle() && !backHasObstacle() && leftHasObstacle() && rightHasObstacle()) {
     turnAngle = 0;
-  }
-  else if (!leftHasObstacle() && !rightHasObstacle() && frontHasObstacle() && backHasObstacle())
-  {
+  } else if (!leftHasObstacle() && !rightHasObstacle() && frontHasObstacle() && backHasObstacle()) {
     turnAngle = 90.0;
-  }
-  else if (frontHasObstacle() && backHasObstacle() && leftHasObstacle() && rightHasObstacle())
-  {
+  } else if (frontHasObstacle() && backHasObstacle() && leftHasObstacle() && rightHasObstacle()) {
     turnAngle = 3600;
-  }
-  else if (!frontHasObstacle() && !backHasObstacle() && !leftHasObstacle() && !rightHasObstacle())
-  {
+  } else if (!frontHasObstacle() && !backHasObstacle() && !leftHasObstacle() && !rightHasObstacle()) {
     return;
-  }
-  else
-  {
+  } else {
     turnAngle = getTurnAngle(x_inch, y_inch);
   }
 
-  if (turnAngle <= 360)
-  {
+  if (turnAngle <= 360) {
     goToAngle(turnAngle);
     forward(forwardDistance, defaultStepSpeed);
-  }
-  else
-  {
+  } else {
     stopMove();
   }
 }
@@ -852,8 +761,7 @@ const double OBSTACLE_MARGIN = 2.0;
 const double FOLLOW_SPEED = 200;
 
 // Check if the robot is within the obstacle margin
-bool isWithinObstacleMargin(double frontDistance)
-{
+bool isWithinObstacleMargin(double frontDistance) {
   return frontDistance < OBSTACLE_THRESHOLD + OBSTACLE_MARGIN && frontDistance > OBSTACLE_THRESHOLD - OBSTACLE_MARGIN;
 }
 
@@ -878,8 +786,7 @@ bool isWithinObstacleMargin(double frontDistance)
  *
  * The function exits the loop and stops the behavior if the object is beyond the maximum LIDAR distance.
  */
-void followBehavior()
-{
+void followBehavior() {
   currentState = FOLLOW_BEHAVIOR;
   updateLEDs();
 
@@ -887,27 +794,16 @@ void followBehavior()
   int front_error_cm = lidar_data.front - OBSTACLE_THRESHOLD;
   double front_error_inch = cm2inch(front_error_cm);
 
-  while (true)
-  {
-    // Serial.print("FRONT ERROR: ");
-    // Serial.println(front_error_cm);
-
-    // Serial.print("FRONT MOVE: ");
-    // Serial.println(followPropotion * front_error_inch);
-
-    if (!isWithinObstacleMargin(lidar_data.front))
-    {
+  while (true) {
+    if (!isWithinObstacleMargin(lidar_data.front)) {
       if (lidar_data.front >= MAX_LIDAR_DISTANCE)
         break;
 
       double moveDistance = abs(followPropotion * front_error_inch);
 
-      if (front_error_cm > 0)
-      {
+      if (front_error_cm > 0) {
         forward(moveDistance, FOLLOW_SPEED);
-      }
-      else if (front_error_cm < 0)
-      {
+      } else if (front_error_cm < 0) {
         reverse(moveDistance, FOLLOW_SPEED);
       }
     }
@@ -939,19 +835,16 @@ void followBehavior()
  * 8. Turns on the green LED while moving, and turns off other LEDs.
  * 9. Adds a small delay to allow sensor readings to be processed.
  */
-void smartWanderBehavior()
-{
+void smartWanderBehavior() {
 
   randomWander();
 
-  while (steppers.run())
-  {
-    digitalWrite(grnLED, HIGH); // turn on green LED
+  while (steppers.run()) {
+    digitalWrite(grnLED, HIGH);  // turn on green LED
     digitalWrite(ylwLED, LOW);
     digitalWrite(redLED, LOW);
 
-    while (isCloseObstacle())
-    {
+    while (isCloseObstacle()) {
       // Obstacle detected - stop motors and turn on LED
       collideBehavior();
       delay(100);
@@ -982,18 +875,15 @@ void smartWanderBehavior()
  * 8. Turns on the green LED to indicate movement.
  * 9. Adds a small delay to allow sensor readings to be processed.
  */
-void smartFollowBehavior()
-{
+void smartFollowBehavior() {
   randomWander();
 
-  while (steppers.run())
-  {
-    digitalWrite(grnLED, HIGH); // turn on green LED
+  while (steppers.run()) {
+    digitalWrite(grnLED, HIGH);  // turn on green LED
     digitalWrite(ylwLED, LOW);
     digitalWrite(redLED, LOW);
 
-    while (checkFrontObstacle())
-    {
+    while (checkFrontObstacle()) {
       // Obstacle detected - stop motors and turn on LED
       collideBehavior();
       delay(100);
@@ -1014,16 +904,13 @@ void smartFollowBehavior()
  * obstacle is removed, it resets the LEDs and stepper motor speeds and continues moving
  * the steppers one step at a time with a small delay to allow sensor readings to be processed.
  */
-void moveAndFollowBehavior()
-{
+void moveAndFollowBehavior() {
   // Set initial movement speeds
   stepperLeft.setSpeed(defaultStepSpeed);
   stepperRight.setSpeed(defaultStepSpeed);
 
-  while (true)
-  {
-    while (isCloseObstacle())
-    {
+  while (true) {
+    while (isCloseObstacle()) {
       collideBehavior();
       followBehavior();
     }
@@ -1041,15 +928,15 @@ void moveAndFollowBehavior()
 }
 
 // Constants for wall following behavior
-const double WallFollowKp = 3.0;   // Proportional gain - adjust this between 1-10
-const double WallFollowKd = 0.1;   // Derivative gain
-unsigned long lastMeasureTime = 0; // For derivative calculation
-double lastError = 0;              // For derivative calculation
+const double WallFollowKp = 3.0;    // Proportional gain - adjust this between 1-10
+const double WallFollowKd = 0.1;    // Derivative gain
+unsigned long lastMeasureTime = 0;  // For derivative calculation
+double lastError = 0;               // For derivative calculation
 
-const double TARGET_DISTANCE = 5.0;     // Target distance from wall (inches)
-const double DEADBAND_INNER = 4.0;      // Inner deadband boundary (inches)
-const double DEADBAND_OUTER = 6.0;      // Outer deadband boundary (inches)
-const int FOLLOW_WALL_BASE_SPEED = 300; // Base motor speed
+const double TARGET_DISTANCE = 5.0;      // Target distance from wall (inches)
+const double DEADBAND_INNER = 4.0;       // Inner deadband boundary (inches)
+const double DEADBAND_OUTER = 6.0;       // Outer deadband boundary (inches)
+const int FOLLOW_WALL_BASE_SPEED = 300;  // Base motor speed
 
 // Convert inches to cm for lidar readings
 const double DEADBAND_INNER_CM = DEADBAND_INNER * 2.54;
@@ -1059,54 +946,41 @@ const double TARGET_DISTANCE_CM = TARGET_DISTANCE * 2.54;
 const int WALL_THRESHOLD = 30;
 const bool bangBangControllorOn = true;
 
-RobotState currentState = RANDOM_WANDER;
-
-bool leftHasWall()
-{
+bool leftHasWall() {
   return lidar_data.left < WALL_THRESHOLD;
 }
 
-bool rightHasWall()
-{
+bool rightHasWall() {
   return lidar_data.right < WALL_THRESHOLD;
 }
 
-bool frontHasWall()
-{
-  return lidar_data.front < WALL_THRESHOLD;
+bool frontHasWall() {
+  return lidar_data.front < 20;
 }
 
-bool isLeftCorner()
-{
+bool isLeftCorner() {
   return frontHasWall() && leftHasWall() && !rightHasWall();
 }
 
-bool isRightCorner()
-{
+bool isRightCorner() {
   return frontHasWall() && rightHasWall() && !leftHasWall();
 }
 
-void followWallBehavior()
-{
+void followWallBehavior() {
   randomWander();
+  Serial.println("followWallBehavior");
 
-  while (steppers.run())
-  {
+  while (steppers.run()) {
     lidar_data = RPC.call("read_lidars").as<struct lidar>();
-    if (leftHasWall() && !rightHasWall())
-    {
+    if (leftHasWall() && !rightHasWall()) {
       // only left has wall
       followLeft();
       break;
-    }
-    else if (!leftHasWall() && rightHasWall())
-    {
+    } else if (!leftHasWall() && rightHasWall()) {
       // only right has wall
       followRight();
       break;
-    }
-    else if (leftHasWall() && rightHasWall())
-    {
+    } else if (leftHasWall() && rightHasWall()) {
       // both left and right have walls
       followCenter();
       break;
@@ -1114,19 +988,16 @@ void followWallBehavior()
   }
 }
 
-void followLeft()
-{
+void followLeft() {
   stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
   stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
   currentState = FOLLOWING_LEFT;
   updateLEDs();
-  delay(500);
 
-  while (true)
-  {
+  while (true) {
     // Calculate time difference for derivative
     unsigned long currentTime = millis();
-    double deltaTime = (currentTime - lastMeasureTime) / 1000.0; // Convert to seconds
+    double deltaTime = (currentTime - lastMeasureTime) / 1000.0;  // Convert to seconds
 
     // Calculate error (how far we are from desired distance)
     double error = lidar_data.left - TARGET_DISTANCE_CM;
@@ -1139,19 +1010,17 @@ void followLeft()
     lastMeasureTime = currentTime;
 
     // If within deadband, drive straight
-    if (lidar_data.left >= DEADBAND_INNER_CM && lidar_data.left <= DEADBAND_OUTER_CM)
-    {
+    if (lidar_data.left >= DEADBAND_INNER_CM && lidar_data.left <= DEADBAND_OUTER_CM) {
+      currentState = INSIDE_DEADBAND;
+      updateLEDs();
       stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
       stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
-    }
-    else
-    {
+    } else {
       // Calculate speed adjustment based on error
       int speedAdjustment = (int)(WallFollowKp * error + WallFollowKd * derivative);
 
       // If too far from wall (positive error)
-      if (error > 0)
-      {
+      if (error > 0) {
         currentState = TOO_FAR;
         updateLEDs();
 
@@ -1160,8 +1029,7 @@ void followLeft()
         stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
       }
       // If too close to wall (negative error)
-      else
-      {
+      else {
         currentState = TOO_CLOSE;
         updateLEDs();
 
@@ -1176,38 +1044,60 @@ void followLeft()
     // if (isSensorTimeIntervalPassed())
     lidar_data = RPC.call("read_lidars").as<struct lidar>();
 
-    if (rightHasWall())
-    {
+    if (rightHasWall()) {
       // both left and right have walls
       followCenter();
     }
 
-    if (isLeftCorner())
-    {
-      currentState = INSIDE_CORNER;
-      updateLEDs();
+    // check if there is a corner on the left (inner corner)
+    detectLeftInnerCorner();
 
-      spin(TO_RIGHT, 90, defaultStepSpeed);
-    }
-
-    if (!leftHasWall())
-    {
+    // check if there is a corner on the right (outer corner)
+    if (!leftHasWall() && !detectLeftOuterCorner())
       return;
-    }
+
+    lidar_data = RPC.call("read_lidars").as<struct lidar>();
+
+    delay(1);
   }
 }
 
-void followRight()
-{
+void detectLeftInnerCorner() {
+  if (isLeftCorner()) {
+    currentState = INSIDE_CORNER;
+    updateLEDs();
+
+    spin(TO_RIGHT, 90, defaultStepSpeed);
+  }
+}
+
+void detectLeftOuterCorner() {
+  currentState = OUTSIDE_CORNER;
+  updateLEDs();
+
+  forward(2, FOLLOW_WALL_BASE_SPEED);
+  spin(TO_LEFT, 145, FOLLOW_WALL_BASE_SPEED);
+
+  lidar_data = RPC.call("read_lidars").as<struct lidar>();
+
+  if (!(lidar_data.front < 40)) {
+    spin(TO_RIGHT, 145, FOLLOW_WALL_BASE_SPEED);
+    return false;
+  } else {
+    spin(TO_RIGHT, 55, FOLLOW_WALL_BASE_SPEED);
+    forward(12, FOLLOW_WALL_BASE_SPEED);
+    return true;
+  }
+}
+
+void followRight() {
   stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
   stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
 
   currentState = FOLLOWING_RIGHT;
   updateLEDs();
-  delay(500);
 
-  while (true)
-  {
+  while (true) {
 
     // Calculate time difference for derivative
     unsigned long currentTime = millis();
@@ -1224,19 +1114,18 @@ void followRight()
     lastMeasureTime = currentTime;
 
     // If within deadband, drive straight
-    if (lidar_data.right >= DEADBAND_INNER_CM && lidar_data.right <= DEADBAND_OUTER_CM)
-    {
+    if (lidar_data.right >= DEADBAND_INNER_CM && lidar_data.right <= DEADBAND_OUTER_CM) {
+      currentState = INSIDE_DEADBAND;
+      updateLEDs();
       stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
       stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
-    } // Outside deadband - apply proportional control
-    else
-    {
+    }  // Outside deadband - apply proportional control
+    else {
       // Calculate speed adjustment based on error
       int speedAdjustment = (int)(WallFollowKp * error + WallFollowKd * derivative);
 
       // If too far from wall (positive error)
-      if (error > 0)
-      {
+      if (error > 0) {
         currentState = TOO_FAR;
         updateLEDs();
         // Turn towards wall - slow down right motor
@@ -1244,8 +1133,7 @@ void followRight()
         stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
       }
       // If too close to wall (negative error)
-      else
-      {
+      else {
         currentState = TOO_CLOSE;
         updateLEDs();
         // Turn away from wall - slow down left motor
@@ -1260,36 +1148,58 @@ void followRight()
     // if (isSensorTimeIntervalPassed())
     lidar_data = RPC.call("read_lidars").as<struct lidar>();
 
-    if (leftHasWall())
-    {
+    if (leftHasWall()) {
       // both left and right have walls
       followCenter();
     }
 
-    if (isRightCorner())
-    {
-      currentState = INSIDE_CORNER;
-      updateLEDs();
-      spin(TO_LEFT, 90, defaultStepSpeed);
-    }
+    // check if there is a corner on the right (inner corner)
+    detectRightInnerCorner();
 
-    if (!rightHasWall())
-    {
+    // check if there is a corner on the right (outer corner)
+    if (!rightHasWall() && !detectRightOuterCorner())
       return;
-    }
+
+    lidar_data = RPC.call("read_lidars").as<struct lidar>();
+    delay(1);
   }
 }
 
-void followCenter()
-{
+void detectRightInnerCorner() {
+  if (isRightCorner()) {
+    currentState = INSIDE_CORNER;
+    updateLEDs();
+
+    spin(TO_LEFT, 90, defaultStepSpeed);
+  }
+}
+
+bool detectRightOuterCorner() {
+  currentState = OUTSIDE_CORNER;
+  updateLEDs();
+
+  forward(2, FOLLOW_WALL_BASE_SPEED);
+  spin(TO_RIGHT, 145, FOLLOW_WALL_BASE_SPEED);
+
+  lidar_data = RPC.call("read_lidars").as<struct lidar>();
+
+  if (!(lidar_data.front < 40)) {
+    spin(TO_LEFT, 145, FOLLOW_WALL_BASE_SPEED);
+    return false;
+  } else {
+    spin(TO_LEFT, 55, FOLLOW_WALL_BASE_SPEED);
+    forward(12, FOLLOW_WALL_BASE_SPEED);
+    return true;
+  }
+}
+
+void followCenter() {
   stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
   stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
   currentState = FOLLOWING_CENTER;
   updateLEDs();
-  delay(500);
 
-  while (true)
-  {
+  while (true) {
 
     // Calculate time difference for derivative
     unsigned long currentTime = millis();
@@ -1310,28 +1220,26 @@ void followCenter()
     lastMeasureTime = currentTime;
 
     // If both within deadband, drive straight
-    if (abs(centerError) <= 1.0)
-    { // Small threshold for center position
+    if (abs(centerError) <= 5.0) {  // Small threshold for center position
+      currentState = INSIDE_DEADBAND;
+      updateLEDs();
       stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
       stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
     }
 
     // Apply proportional control to center robot
-    else
-    {
+    else {
       int speedAdjustment = (int)(WallFollowKp * centerError + WallFollowKd * derivative);
 
       // If closer to right wall
-      if (centerError > 0)
-      {
+      if (centerError > 0) {
         currentState = CLOSE_TO_RIGHT;
         updateLEDs();
         stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
         stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
       }
       // If closer to left wall
-      else
-      {
+      else {
         currentState = CLOSE_TO_LEFT;
         updateLEDs();
         stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
@@ -1344,18 +1252,15 @@ void followCenter()
     // if (isSensorTimeIntervalPassed())
     lidar_data = RPC.call("read_lidars").as<struct lidar>();
 
-    if (leftHasWall() && !rightHasWall())
-    {
+    if (leftHasWall() && !rightHasWall()) {
       followLeft();
-    }
-    else if (!leftHasWall() && rightHasWall())
-    {
+    } else if (!leftHasWall() && rightHasWall()) {
       followRight();
-    }
-    else if (!leftHasWall() && !rightHasWall())
-    {
+    } else if (!leftHasWall() && !rightHasWall()) {
       return;
     }
+
+    delay(1);
   }
 }
 
@@ -1368,11 +1273,10 @@ void followCenter()
  * - Attaches an interrupt to the right wheel encoder pin, triggering the RwheelSpeed function on any change.
  * - Delays execution for 1000 milliseconds to allow for setup stabilization.
  */
-void setupM7()
-{
-  init_stepper();                                                         // set up stepper motor
-  attachInterrupt(digitalPinToInterrupt(ltEncoder), LwheelSpeed, CHANGE); // init the interrupt mode for the left encoder
-  attachInterrupt(digitalPinToInterrupt(rtEncoder), RwheelSpeed, CHANGE); // init the interrupt mode for the right encoder
+void setupM7() {
+  init_stepper();                                                          // set up stepper motor
+  attachInterrupt(digitalPinToInterrupt(ltEncoder), LwheelSpeed, CHANGE);  // init the interrupt mode for the left encoder
+  attachInterrupt(digitalPinToInterrupt(rtEncoder), RwheelSpeed, CHANGE);  // init the interrupt mode for the right encoder
   delay(1000);
 }
 
@@ -1384,44 +1288,40 @@ void setupM7()
  * smartFollowBehavior function. Other behaviors such as smartWanderBehavior
  * and runawayBehavior are commented out and can be enabled if needed.
  */
-void loopM7()
-{
-  digitalWrite(redLED, LOW); // Initially LED is off
+void loopM7() {
+  digitalWrite(redLED, LOW);  // Initially LED is off
   digitalWrite(ylwLED, LOW);
   digitalWrite(grnLED, LOW);
 
-  while (true)
-  {
+  while (true) {
     // smartWanderBehavior();
-    smartFollowBehavior();
+    // smartFollowBehavior();
     // runawayBehavior();
-    // followWallBehavior();
+    followWallBehavior();
+    // followRight();
   }
 }
 
 // set up the M4 to be the server for the sensors data
-void setupM4()
-{
-  for (int i = 0; i < numOfSens; i++)
-  {
+void setupM4() {
+  for (int i = 0; i < numOfSens; i++) {
     pinMode(lidar_pins[i], OUTPUT);
   }
-  RPC.bind("read_lidars", read_lidars); // bind a method to return the lidar data all at once
-  RPC.bind("read_sonars", read_sonars); // bind a method to return the lidar data all at once
+  RPC.bind("read_lidars", read_lidars);  // bind a method to return the lidar data all at once
+  RPC.bind("read_sonars", read_sonars);  // bind a method to return the lidar data all at once
 }
 
 // loop for the M4 to read the sensors
-void loopM4()
-{
+void loopM4() {
   // Add delays between readings to allow sensor to stabilize
   lidarData.front = read_lidar(ft_lidar);
-  delay(50);
+  delay(20);
   lidarData.back = read_lidar(bk_lidar);
-  delay(50);
+  delay(20);
   lidarData.left = read_lidar(lt_lidar);
-  delay(50);
+  delay(20);
   lidarData.right = read_lidar(rt_lidar);
-  delay(50);
+  delay(20);
 
   // sonarData.right = read_sonar(leftSnr);
   // delay(20);
@@ -1430,23 +1330,19 @@ void loopM4()
 }
 
 // MAIN
-void setup()
-{
-  int baudrate = 9600;       // serial monitor baud rate'
-  randomSeed(analogRead(0)); // generate a new random number each time called
-  Serial.begin(baudrate);    // start serial monitor communication
+void setup() {
+  int baudrate = 9600;        // serial monitor baud rate'
+  randomSeed(analogRead(0));  // generate a new random number each time called
+  Serial.begin(baudrate);     // start serial monitor communication
   Serial.println("Robot starting...Put ON TEST STAND");
 
   RPC.begin();
-  if (HAL_GetCurrentCPUID() == CM7_CPUID)
-  {
+  if (HAL_GetCurrentCPUID() == CM7_CPUID) {
     // if on M7 CPU, run M7 setup & loop
     setupM7();
     while (1)
       loopM7();
-  }
-  else
-  {
+  } else {
     // if on M4 CPU, run M7 setup & loop
     setupM4();
     while (1)
