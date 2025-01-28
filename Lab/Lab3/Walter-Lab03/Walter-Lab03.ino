@@ -943,7 +943,7 @@ const double DEADBAND_INNER_CM = DEADBAND_INNER * 2.54;
 const double DEADBAND_OUTER_CM = DEADBAND_OUTER * 2.54;
 const double TARGET_DISTANCE_CM = TARGET_DISTANCE * 2.54;
 
-const int WALL_THRESHOLD = 30;
+const int WALL_THRESHOLD = 35;
 const bool bangBangControllorOn = true;
 
 bool leftHasWall() {
@@ -955,7 +955,7 @@ bool rightHasWall() {
 }
 
 bool frontHasWall() {
-  return lidar_data.front < 20;
+  return lidar_data.front < WALL_THRESHOLD;
 }
 
 bool isLeftCorner() {
@@ -1071,23 +1071,26 @@ void detectLeftInnerCorner() {
   }
 }
 
-void detectLeftOuterCorner() {
+bool detectLeftOuterCorner() {
   currentState = OUTSIDE_CORNER;
   updateLEDs();
 
   forward(2, FOLLOW_WALL_BASE_SPEED);
-  spin(TO_LEFT, 145, FOLLOW_WALL_BASE_SPEED);
+  spin(TO_LEFT, 90, FOLLOW_WALL_BASE_SPEED);
+  forward(12, FOLLOW_WALL_BASE_SPEED);
 
   lidar_data = RPC.call("read_lidars").as<struct lidar>();
 
-  if (!(lidar_data.front < 40)) {
-    spin(TO_RIGHT, 145, FOLLOW_WALL_BASE_SPEED);
-    return false;
-  } else {
-    spin(TO_RIGHT, 55, FOLLOW_WALL_BASE_SPEED);
-    forward(12, FOLLOW_WALL_BASE_SPEED);
-    return true;
-  }
+  return leftHasWall();
+
+  // if (!(lidar_data.front < 40)) {
+  //   spin(TO_RIGHT, 145, FOLLOW_WALL_BASE_SPEED);
+  //   return false;
+  // } else {
+  //   spin(TO_RIGHT, 55, FOLLOW_WALL_BASE_SPEED);
+  //   forward(12, FOLLOW_WALL_BASE_SPEED);
+  //   return true;
+  // }
 }
 
 void followRight() {
@@ -1179,18 +1182,12 @@ bool detectRightOuterCorner() {
   updateLEDs();
 
   forward(2, FOLLOW_WALL_BASE_SPEED);
-  spin(TO_RIGHT, 145, FOLLOW_WALL_BASE_SPEED);
+  spin(TO_RIGHT, 90, FOLLOW_WALL_BASE_SPEED);
+  forward(12, FOLLOW_WALL_BASE_SPEED);
 
   lidar_data = RPC.call("read_lidars").as<struct lidar>();
 
-  if (!(lidar_data.front < 40)) {
-    spin(TO_LEFT, 145, FOLLOW_WALL_BASE_SPEED);
-    return false;
-  } else {
-    spin(TO_LEFT, 55, FOLLOW_WALL_BASE_SPEED);
-    forward(12, FOLLOW_WALL_BASE_SPEED);
-    return true;
-  }
+  return rightHasWall();
 }
 
 void followCenter() {
@@ -1198,8 +1195,12 @@ void followCenter() {
   stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
   currentState = FOLLOWING_CENTER;
   updateLEDs();
+  lastError = 0;
 
   while (true) {
+    
+
+    lidar_data = RPC.call("read_lidars").as<struct lidar>();
 
     // Calculate time difference for derivative
     unsigned long currentTime = millis();
@@ -1210,7 +1211,7 @@ void followCenter() {
     double errorRight = lidar_data.right - TARGET_DISTANCE_CM;
 
     // Calculate center error (positive means closer to left wall)
-    double centerError = errorLeft - errorRight;
+    double centerError = (errorLeft + errorRight) / 2.0;
 
     // Calculate derivative term
     double derivative = deltaTime > 0 ? (centerError - lastError) / deltaTime : 0;
@@ -1220,9 +1221,7 @@ void followCenter() {
     lastMeasureTime = currentTime;
 
     // If both within deadband, drive straight
-    if (abs(centerError) <= 5.0) {  // Small threshold for center position
-      currentState = INSIDE_DEADBAND;
-      updateLEDs();
+    if (abs(centerError) <= 1.0) {  // Small threshold for center position
       stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
       stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
     }
@@ -1230,26 +1229,22 @@ void followCenter() {
     // Apply proportional control to center robot
     else {
       int speedAdjustment = (int)(WallFollowKp * centerError + WallFollowKd * derivative);
+      // int speedAdjustment = (int)(followCenterKp * centerError);
 
       // If closer to right wall
       if (centerError > 0) {
-        currentState = CLOSE_TO_RIGHT;
-        updateLEDs();
         stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
-        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED + abs(speedAdjustment));
       }
       // If closer to left wall
       else {
-        currentState = CLOSE_TO_LEFT;
-        updateLEDs();
-        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED + abs(speedAdjustment));
         stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
       }
     }
     stepperLeft.runSpeed();
     stepperRight.runSpeed();
 
-    // if (isSensorTimeIntervalPassed())
     lidar_data = RPC.call("read_lidars").as<struct lidar>();
 
     if (leftHasWall() && !rightHasWall()) {
@@ -1258,6 +1253,8 @@ void followCenter() {
       followRight();
     } else if (!leftHasWall() && !rightHasWall()) {
       return;
+    } else if (leftHasWall() && rightHasWall() && frontHasWall()) {
+      goToAngle(180);
     }
 
     delay(1);
