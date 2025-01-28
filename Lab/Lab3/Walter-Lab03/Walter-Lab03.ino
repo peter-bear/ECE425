@@ -1206,9 +1206,11 @@ void followCenter() {
     unsigned long currentTime = millis();
     double deltaTime = (currentTime - lastMeasureTime) / 1000.0;
 
+    double targetDistance = (lidar_data.left + lidar_data.right)/2
+
     // Calculate errors for both walls
-    double errorLeft = lidar_data.left - TARGET_DISTANCE_CM;
-    double errorRight = lidar_data.right - TARGET_DISTANCE_CM;
+    double errorLeft = lidar_data.left - targetDistance;
+    double errorRight = lidar_data.right - targetDistance;
 
     // Calculate center error (positive means closer to left wall)
     double centerError = (errorLeft + errorRight) / 2.0;
@@ -1219,6 +1221,8 @@ void followCenter() {
     // Store current values for next iteration
     lastError = centerError;
     lastMeasureTime = currentTime;
+
+    // int speedAdjustment = (int)(WallFollowKp * centerError + WallFollowKd * derivative);
 
     // If both within deadband, drive straight
     if (abs(centerError) <= 1.0) {  // Small threshold for center position
@@ -1242,6 +1246,7 @@ void followCenter() {
         stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
       }
     }
+    
     stepperLeft.runSpeed();
     stepperRight.runSpeed();
 
