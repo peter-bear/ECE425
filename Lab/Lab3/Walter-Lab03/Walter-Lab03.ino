@@ -1195,49 +1195,11 @@ void followCenter() {
   stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
   currentState = FOLLOWING_CENTER;
   updateLEDs();
- 
+
   while (true) {
- 
-    // Calculate time difference for derivative
-    unsigned long currentTime = millis();
-    double deltaTime = (currentTime - lastMeasureTime) / 1000.0;
- 
-    // Calculate center error (positive means closer to left wall)
-    double centerError = (lidar_data.right-lidar_data.left) / 2.0;
- 
-    // Calculate derivative term
-    double derivative = deltaTime > 0 ? (centerError - lastError) / deltaTime : 0;
- 
-    // Store current values for next iteration
-    lastError = centerError;
-    lastMeasureTime = currentTime;
- 
-    // If both within deadband, drive straight
-    if (abs(centerError) <= 1.0) {  // Small threshold for center position
-      stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
-      stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
-    }
- 
-    // Apply proportional control to center robot
-    else {
-      int speedAdjustment = (int)(WallFollowKp * centerError - 0.3 * derivative);
- 
-      // If closer to left wall
-      if (centerError > 0) {
-        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED + abs(speedAdjustment));
-        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
-      }
-      // If closer to right wall
-      else {
-        stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
-        stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED + abs(speedAdjustment));
-      }
-    }
-    stepperLeft.runSpeed();
-    stepperRight.runSpeed();
- 
+
     lidar_data = RPC.call("read_lidars").as<struct lidar>();
- 
+
     if (leftHasWall() && !rightHasWall()) {
       followLeft();
     } else if (!leftHasWall() && rightHasWall()) {
@@ -1247,8 +1209,28 @@ void followCenter() {
     } else if (leftHasWall() && rightHasWall() && frontHasWall()) {
       goToAngle(180);
     }
- 
-    delay(1);
+
+    // Calculate center error (positive means closer to left wall)
+    float error = lidar_data.left - lidar_data.right;
+    float error_diff = error - lastError;
+
+    double speedAdjustment = 0.9 * error + WallFollowKd * error_diff;
+
+    // if (speedAdjustment > 30) speedAdjustment = 30;
+    // if (speedAdjustment < -30) speedAdjustment = -30;
+
+    if (abs(error) <= 3) {
+      speedAdjustment = 0;
+    }
+
+    stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - speedAdjustment);
+    stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED + speedAdjustment);
+
+
+    stepperLeft.runSpeed();
+    stepperRight.runSpeed();
+
+    lastError = error;
   }
 }
 
@@ -1286,7 +1268,7 @@ void loopM7() {
     // smartFollowBehavior();
     // runawayBehavior();
     followWallBehavior();
-    // followRight();
+    // followCenter();
   }
 }
 
