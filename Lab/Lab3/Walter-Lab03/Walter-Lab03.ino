@@ -386,9 +386,11 @@ int length2Steps(double length) {
  * @param speed the speed of the spin in steps per second
  */
 void spin(int direction, double angle, int speed) {
+  stepperLeft.setCurrentPosition(0);
+  stepperRight.setCurrentPosition(0);
   if (direction != TO_LEFT && direction != TO_RIGHT && angle < 0)
     return;
-  resetEncoder();
+  // resetEncoder();
 
   // calculate the turn length, using the circle formula
   double stepperMoveLength = pi * robotWidth * angle / 360;
@@ -411,11 +413,11 @@ void spin(int direction, double angle, int speed) {
   steppers.runSpeedToPosition();
 
   // use Encoder PID Control
-  if (direction == TO_RIGHT) {
-    PIDControl(stepperMovePos, -stepperMovePos);
-  } else if (direction == TO_LEFT) {
-    PIDControl(-stepperMovePos, stepperMovePos);
-  }
+  // if (direction == TO_RIGHT) {
+  //   PIDControl(stepperMovePos, -stepperMovePos);
+  // } else if (direction == TO_LEFT) {
+  //   PIDControl(-stepperMovePos, stepperMovePos);
+  // }
 }
 
 /**
@@ -1213,8 +1215,6 @@ void followCenter() {
 
     double speedAdjustment = 0.9 * error + WallFollowKd * error_diff;
 
-
-
     if (abs(error) <= 3) {
       speedAdjustment = 0;
     }
@@ -1229,38 +1229,95 @@ void followCenter() {
   }
 }
 
-void goToGoalAvoidbs(int x, int y) {
-  encoder[LEFT] = 0;
-  encoder[RIGHT] = 0;
+enum ToGoalState {
+  MOVING,
+  AVOID_OBSTACLE_1,
+  AVOID_OBSTACLE_2,
+  AVOID_OBSTACLE_3,
+};
+
+void setStepperCounter(long position) {
+  encoder[LEFT] = position;
+  encoder[RIGHT] = position;
+}
+
+void goToGoalAvoidbs(double x, double y) {
 
   int obsCount = 0;
 
-  int angle;
-
-  angle = atan2(y, x)*180/3.1415;
-
-  // Serial.println("Angle: ");
-  // Serial.println(angle);
+  double angle = getTurnAngle(x, y);
 
   goToAngle(angle);
-  delay(1000);
-  digitalWrite(grnLED, LOW);       //turn off green LED
 
-  double distance = sqrt(pow(x,2) + pow(y,2));
+  double distanceSteps = length2Steps(sqrt(pow(x, 2) + pow(y, 2)));
+  Serial.println(distanceSteps);
 
-  int eCounts = distance / 10.8 * 40;
+  int eCounts = 0;
+  int avoidObsCount = 0;
+  setStepperCounter(0);
 
-  while(eCounts - encoder[LEFT] >= 0){
+  ToGoalState state = MOVING;
+
+  while (eCounts * encoderRatio < distanceSteps) {
     lidar_data = RPC.call("read_lidars").as<struct lidar>();
-    
-    if(frontHasWall()){
 
+    switch (state) {
+      case MOVING:
+        if (lidar_data.front<10) {
+          spin(TO_LEFT, 90, defaultStepSpeed);
+          state = AVOID_OBSTACLE_1;
+          setStepperCounter(0);
+        } else {
+          eCounts = encoder[LEFT];
+          Serial.println("MOVING");
+        }
+        break;
+      case AVOID_OBSTACLE_1:
+        if (lidar_data.right > 30) {
+          forward(2, defaultStepSpeed);
+          spin(TO_RIGHT, 90, defaultStepSpeed);
+          forward(12, defaultStepSpeed);
+          state = AVOID_OBSTACLE_2;
+          setStepperCounter(eCounts);
+        } else {
+          avoidObsCount = encoder[LEFT];
+          Serial.println("AVOID 1");
+        }
+        break;
+      case AVOID_OBSTACLE_2:
+        if (lidar_data.right > 30) {
+          forward(4, defaultStepSpeed);
+          spin(TO_RIGHT, 90, defaultStepSpeed);
+          forward(5, defaultStepSpeed);
+          state = AVOID_OBSTACLE_3;
+          setStepperCounter(0);
+        } else {
+          eCounts = encoder[LEFT];
+          Serial.println("AVOID 2");
+        }
+        break;
+      case AVOID_OBSTACLE_3:
+        if (encoder[LEFT] >= avoidObsCount) {
+          spin(TO_LEFT, 85, defaultStepSpeed);
+          state = MOVING;
+          eCounts += length2Steps(14)/encoderRatio;
+          setStepperCounter(eCounts);
+        }
+        else{
+          Serial.println("AVOID 3");
+        }
+        break;
+      default:
+        break;
     }
-    
 
+    stepperLeft.setSpeed(defaultStepSpeed);
+    stepperRight.setSpeed(defaultStepSpeed);
+    stepperLeft.runSpeed();
+    stepperRight.runSpeed();
   }
 
-
+  delay(10000);
 }
 
 
@@ -1296,7 +1353,8 @@ void loopM7() {
     // smartWanderBehavior();
     // smartFollowBehavior();
     // runawayBehavior();
-    followWallBehavior();
+    // followWallBehavior();
+    goToGoalAvoidbs(72.0, 0.0);
   }
 }
 
