@@ -390,7 +390,6 @@ void spin(int direction, double angle, int speed) {
   stepperRight.setCurrentPosition(0);
   if (direction != TO_LEFT && direction != TO_RIGHT && angle < 0)
     return;
-  // resetEncoder();
 
   // calculate the turn length, using the circle formula
   double stepperMoveLength = pi * robotWidth * angle / 360;
@@ -411,13 +410,6 @@ void spin(int direction, double angle, int speed) {
   }
 
   steppers.runSpeedToPosition();
-
-  // use Encoder PID Control
-  // if (direction == TO_RIGHT) {
-  //   PIDControl(stepperMovePos, -stepperMovePos);
-  // } else if (direction == TO_LEFT) {
-  //   PIDControl(-stepperMovePos, stepperMovePos);
-  // }
 }
 
 /**
@@ -979,11 +971,11 @@ void followWallBehavior() {
 
   while (steppers.run()) {
     lidar_data = RPC.call("read_lidars").as<struct lidar>();
-    if (leftHasWall() && !rightHasWall()) {
+    if (leftHasWall() && !rightHasWall() && lidar_data.left > DEADBAND_INNER_CM) {
       // only left has wall
       followLeft();
       break;
-    } else if (!leftHasWall() && rightHasWall()) {
+    } else if (!leftHasWall() && rightHasWall() && lidar_data.left > DEADBAND_INNER_CM) {
       // only right has wall
       followRight();
       break;
@@ -994,10 +986,36 @@ void followWallBehavior() {
     } else if (frontHasWall()) {
       spin(TO_LEFT, 90, defaultStepSpeed);
       break;
+    } else if (lidar_data.right < DEADBAND_INNER_CM || lidar_data.left < DEADBAND_INNER_CM) {
+      avoidObstacle();
     }
   }
 }
 
+
+/**
+ * @brief Function to follow the left wall using lidar data.
+ * 
+ * This function sets the speed of the left and right stepper motors to a base speed,
+ * updates the current state to FOLLOWING_LEFT, and then enters an infinite loop to
+ * continuously adjust the robot's path based on lidar readings.
+ * 
+ * The function performs the following steps:
+ * 1. Sets the speed of both stepper motors to FOLLOW_WALL_BASE_SPEED.
+ * 2. Updates the current state to FOLLOWING_LEFT and updates the LEDs.
+ * 3. Enters an infinite loop to continuously read lidar data and adjust the robot's path.
+ * 4. Checks if there is a wall on the right side and calls followCenter() if both sides have walls.
+ * 5. Detects inner and outer corners on the left side.
+ * 6. Calculates the error between the current distance to the left wall and the target distance.
+ * 7. Adjusts the speed of the motors based on the error to maintain the desired distance from the wall.
+ * 8. Updates the current state and LEDs based on the error.
+ * 9. Runs the motors at the adjusted speeds.
+ * 
+ * The function uses a proportional-derivative (PD) controller to adjust the motor speeds
+ * based on the error and its derivative.
+ * 
+ * @note This function contains an infinite loop and will not return.
+ */
 void followLeft() {
   stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
   stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
@@ -1034,11 +1052,9 @@ void followLeft() {
       updateLEDs();
       stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
       stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
-    }
-    // else if (lidar_data.left < DEADBAND_INNER_CM) {
-    //   avoidObstacle();
-    // }
-    else {
+    } else if (lidar_data.left < DEADBAND_INNER_CM) {
+      avoidObstacle();
+    } else {
       // Calculate speed adjustment based on error
       int speedAdjustment = (int)(WallFollowKp * error + WallFollowKd * error_diff);
 
@@ -1067,6 +1083,14 @@ void followLeft() {
   }
 }
 
+/**
+ * @brief Detects if the robot is at the left inner corner and updates the state accordingly.
+ *
+ * This function checks if the robot is at the left inner corner using the isLeftCorner() function.
+ * If the robot is at the left inner corner, it updates the current state to INSIDE_CORNER,
+ * updates the LEDs to reflect the new state, and then spins the robot 90 degrees to the right
+ * at the default step speed.
+ */
 void detectLeftInnerCorner() {
   if (isLeftCorner()) {
     currentState = INSIDE_CORNER;
@@ -1076,6 +1100,16 @@ void detectLeftInnerCorner() {
   }
 }
 
+/**
+ * @brief Detects the left outer corner of the robot's path.
+ *
+ * This function performs a series of movements to detect the left outer corner.
+ * It updates the current state to OUTSIDE_CORNER and updates the LEDs accordingly.
+ * The robot moves forward, spins to the left, and moves forward again.
+ * It then reads the LIDAR data to determine if there is a wall on the left side.
+ *
+ * @return true if there is a wall on the left side, false otherwise.
+ */
 bool detectLeftOuterCorner() {
   currentState = OUTSIDE_CORNER;
   updateLEDs();
@@ -1087,17 +1121,42 @@ bool detectLeftOuterCorner() {
   lidar_data = RPC.call("read_lidars").as<struct lidar>();
 
   return leftHasWall();
-
-  // if (!(lidar_data.front < 40)) {
-  //   spin(TO_RIGHT, 145, FOLLOW_WALL_BASE_SPEED);
-  //   return false;
-  // } else {
-  //   spin(TO_RIGHT, 55, FOLLOW_WALL_BASE_SPEED);
-  //   forward(12, FOLLOW_WALL_BASE_SPEED);
-  //   return true;
-  // }
 }
 
+/**
+ * @brief Function to follow the right wall using LIDAR data and stepper motors.
+ * 
+ * This function sets the speed of the left and right stepper motors to a base speed
+ * and enters a loop where it continuously reads LIDAR data to adjust the robot's
+ * movement to follow the right wall. The function uses proportional control to
+ * maintain a target distance from the wall and handles different scenarios such as
+ * detecting corners and avoiding obstacles.
+ * 
+ * The function performs the following steps:
+ * 1. Sets the initial speed of the stepper motors.
+ * 2. Sets the current state to FOLLOWING_RIGHT and updates the LEDs.
+ * 3. Enters an infinite loop to continuously read LIDAR data and adjust motor speeds.
+ * 4. Checks if there is a wall on the left and calls followCenter() if both left and right have walls.
+ * 5. Detects inner and outer corners on the right.
+ * 6. Calculates the error between the current distance and the target distance.
+ * 7. Applies proportional control to adjust motor speeds based on the error.
+ * 8. Updates the current state and LEDs based on the error.
+ * 9. Runs the stepper motors at the adjusted speeds.
+ * 
+ * @note This function assumes the existence of several global variables and functions:
+ * - stepperLeft, stepperRight: Instances of stepper motor control.
+ * - FOLLOW_WALL_BASE_SPEED: Base speed for the motors.
+ * - currentState: Current state of the robot.
+ * - updateLEDs(): Function to update the state of LEDs.
+ * - lidar_data: Struct containing LIDAR data.
+ * - TARGET_DISTANCE_CM: Desired distance from the wall.
+ * - DEADBAND_INNER_CM, DEADBAND_OUTER_CM: Deadband range for distance control.
+ * - WallFollowKp, WallFollowKd: Proportional and derivative gains for control.
+ * - lastError: Previous error value for derivative control.
+ * - leftHasWall(), rightHasWall(): Functions to check for walls on the left and right.
+ * - detectRightInnerCorner(), detectRightOuterCorner(): Functions to detect corners.
+ * - avoidObstacle(): Function to avoid obstacles.
+ */
 void followRight() {
   stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
   stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
@@ -1137,10 +1196,9 @@ void followRight() {
       stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
       stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
     }  // Outside deadband - apply proportional control
-    // else if (lidar_data.right < DEADBAND_INNER_CM) {
-    //   avoidObstacle();
-    // }
-    else {
+    else if (lidar_data.right < DEADBAND_INNER_CM) {
+      avoidObstacle();
+    } else {
       // Calculate speed adjustment based on error
       int speedAdjustment = (int)(WallFollowKp * error + WallFollowKd * error_diff);
 
@@ -1152,6 +1210,7 @@ void followRight() {
         stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
         stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
       }
+
       // If too close to wall (negative error)
       else {
         currentState = TOO_CLOSE;
@@ -1167,6 +1226,13 @@ void followRight() {
   }
 }
 
+/**
+ * @brief Detects if the robot is at a right inner corner and updates its state accordingly.
+ *
+ * This function checks if the robot is at a right inner corner using the isRightCorner() function.
+ * If a right inner corner is detected, it updates the current state to INSIDE_CORNER, updates the LEDs,
+ * and makes the robot spin to the left by 90 degrees at the default step speed.
+ */
 void detectRightInnerCorner() {
   if (isRightCorner()) {
     currentState = INSIDE_CORNER;
@@ -1176,6 +1242,17 @@ void detectRightInnerCorner() {
   }
 }
 
+/**
+ * @brief Detects the right outer corner of the environment.
+ *
+ * This function performs a series of movements to detect the right outer corner.
+ * It updates the current state to OUTSIDE_CORNER and updates the LEDs accordingly.
+ * The robot moves forward a short distance, spins to the right by 90 degrees,
+ * and then moves forward a longer distance. It then reads the LIDAR data to
+ * determine if there is a wall on the right side.
+ *
+ * @return true if there is a wall on the right side, false otherwise.
+ */
 bool detectRightOuterCorner() {
   currentState = OUTSIDE_CORNER;
   updateLEDs();
@@ -1189,6 +1266,37 @@ bool detectRightOuterCorner() {
   return rightHasWall();
 }
 
+/**
+ * @brief Function to follow the center path between two walls using LIDAR data.
+ * 
+ * This function sets the speed of the left and right stepper motors to a base speed
+ * and continuously adjusts the speed based on the LIDAR readings to maintain a central
+ * position between two walls. It updates the current state to FOLLOWING_CENTER and
+ * updates the LEDs accordingly.
+ * 
+ * The function reads LIDAR data to determine the presence of walls on the left, right,
+ * and front. Depending on the presence of walls, it calls appropriate functions to
+ * follow the left or right wall, or to turn around if a wall is detected in front.
+ * 
+ * The center error is calculated as the difference between the left and right LIDAR
+ * readings. A speed adjustment is computed based on the error and its difference from
+ * the last error, and the speeds of the stepper motors are adjusted accordingly.
+ * 
+ * The function runs indefinitely in a loop, continuously adjusting the motor speeds
+ * to follow the center path.
+ * 
+ * @note The function assumes the existence of certain global variables and functions:
+ * - FOLLOW_WALL_BASE_SPEED: Base speed for the motors.
+ * - currentState: Variable to store the current state of the robot.
+ * - updateLEDs(): Function to update the LEDs based on the current state.
+ * - RPC.call("read_lidars"): Function to read LIDAR data.
+ * - leftHasWall(), rightHasWall(), frontHasWall(): Functions to check for walls.
+ * - followLeft(), followRight(): Functions to follow the left or right wall.
+ * - goToAngle(int angle): Function to turn the robot to a specified angle.
+ * - WallFollowKd: Constant for the derivative term in the speed adjustment calculation.
+ * - lastError: Variable to store the last error value.
+ * - lidar_data: Struct to store LIDAR readings.
+ */
 void followCenter() {
   stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
   stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
@@ -1236,11 +1344,41 @@ enum ToGoalState {
   AVOID_OBSTACLE_3,
 };
 
+/**
+ * @brief Sets the position of both the left and right stepper motor encoders.
+ * 
+ * This function updates the encoder positions for both the left and right stepper motors
+ * to the specified position.
+ * 
+ * @param position The new position to set for both the left and right encoders.
+ */
 void setStepperCounter(long position) {
   encoder[LEFT] = position;
   encoder[RIGHT] = position;
 }
 
+/**
+ * @brief Moves the robot to a specified goal while avoiding obstacles.
+ * 
+ * This function calculates the angle and distance to the goal, then moves the robot
+ * towards the goal while checking for obstacles using LIDAR data. If an obstacle is detected,
+ * the robot will perform a series of maneuvers to avoid the obstacle and then continue towards
+ * the goal.
+ * 
+ * @param x The x-coordinate of the goal.
+ * @param y The y-coordinate of the goal.
+ * 
+ * The function uses the following states to manage the robot's movement:
+ * - MOVING: The robot is moving towards the goal.
+ * - AVOID_OBSTACLE_1: The robot detected an obstacle and is performing the first avoidance maneuver.
+ * - AVOID_OBSTACLE_2: The robot is performing the second avoidance maneuver.
+ * - AVOID_OBSTACLE_3: The robot is performing the third avoidance maneuver and will resume moving towards the goal.
+ * 
+ * The function uses LIDAR data to detect obstacles and encoder data to track the robot's movement.
+ * It adjusts the robot's speed and direction based on the current state and obstacle detection.
+ * 
+ * The function also includes debug prints to the Serial monitor to indicate the current state and actions.
+ */
 void goToGoalAvoidbs(double x, double y) {
 
   int obsCount = 0;
@@ -1263,7 +1401,7 @@ void goToGoalAvoidbs(double x, double y) {
 
     switch (state) {
       case MOVING:
-        if (lidar_data.front<10) {
+        if (lidar_data.front < 10) {
           spin(TO_LEFT, 90, defaultStepSpeed);
           state = AVOID_OBSTACLE_1;
           setStepperCounter(0);
@@ -1276,7 +1414,7 @@ void goToGoalAvoidbs(double x, double y) {
         if (lidar_data.right > 30) {
           forward(2, defaultStepSpeed);
           spin(TO_RIGHT, 90, defaultStepSpeed);
-          forward(12, defaultStepSpeed);
+          forward(14, defaultStepSpeed);
           state = AVOID_OBSTACLE_2;
           setStepperCounter(eCounts);
         } else {
@@ -1300,10 +1438,9 @@ void goToGoalAvoidbs(double x, double y) {
         if (encoder[LEFT] >= avoidObsCount) {
           spin(TO_LEFT, 85, defaultStepSpeed);
           state = MOVING;
-          eCounts += length2Steps(14)/encoderRatio;
+          eCounts += length2Steps(14) / encoderRatio;
           setStepperCounter(eCounts);
-        }
-        else{
+        } else {
           Serial.println("AVOID 3");
         }
         break;
