@@ -859,35 +859,3 @@ void goToGoalAvoidbs(double x, double y) {
     stepperRight.runSpeed();
   }
 }
-
-
-
-void stateBehaviors() {
-    switch (currentState){
-      case STOP:
-        stepperLeft.setSpeed(0);
-        stepperRight.setSpeed(0);
-        break;
-      case MOVE_FORWARD:
-        stepperLeft.setSpeed(defaultStepSpeed);
-        stepperRight.setSpeed(defaultStepSpeed);
-        break;
-      case TURN_LEFT:
-        stepperLeft.setSpeed(-defaultStepSpeed);
-        stepperRight.setSpeed(defaultStepSpeed);
-        break;
-      case TURN_RIGHT:
-        stepperLeft.setSpeed(defaultStepSpeed);
-        stepperRight.setSpeed(-defaultStepSpeed);
-        break;
-      case MOVE_BACKWARD:
-        stepperLeft.setSpeed(-defaultStepSpeed);
-        stepperRight.setSpeed(-defaultStepSpeed);
-        break;
-      default:
-        stopMove();
-        break;
-    }
-    stepperLeft.runSpeed();
-    stepperRight.runSpeed();
-  }

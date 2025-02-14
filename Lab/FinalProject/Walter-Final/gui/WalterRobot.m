@@ -14,6 +14,7 @@ classdef WalterRobot < hgsetget
         ledDataTopic = "walter/led_data";
         encoderDataTopic = "walter/encoder_data";
         moveControlTopic = "walter/move_control";
+        matrixDataTopic = "walter/map_data";
 
         moveForward = "MOVE_FORWARD";
         moveBackward = "MOVE_BACKWARD";

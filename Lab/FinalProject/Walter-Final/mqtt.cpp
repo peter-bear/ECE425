@@ -13,6 +13,7 @@ const char* sonarTopic = SONAR_DATA_TOPIC;
 const char* ledTopic = LED_DATA_TOPIC;
 const char* encoderTopic = ENCODER_DATA_TOPIC;
 const char* moveControlTopic = MOVE_CONTROL_TOPIC;
+const char* mapDataTopic = MAP_DATA_TOPIC;
 
 
 void connectWifi() {
@@ -146,5 +147,19 @@ void publishData() {
 
     sprintf(mqttBuffer, "%d %d", LED_Status[0], LED_Status[1], LED_Status[2]);
     publishTopic(ledTopic, mqttBuffer);
+
+    int index = 0;
+    // send matrix data
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            index += sprintf(mqttBuffer + index, "%d", matrix[i][j]);
+            if (j < 3) { // Add space between numbers in the row
+                index += sprintf(mqttBuffer + index, " ");
+            }
+        }
+        if (i < 3) { // Add semicolon between rows
+            index += sprintf(mqttBuffer + index, "; ");
+        }
+    }
   }
 }

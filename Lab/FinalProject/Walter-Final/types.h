@@ -24,6 +24,16 @@ enum RobotState {
   TURN_LEFT,
   TURN_RIGHT,
   MOVE_BACKWARD,
+  SLAM_BEHAVIOR,
+  MATRIX_PATH_PLANNING,
+};
+
+enum SLAMState{
+  DETECT_OBSTACLE,
+  EXPLORE_START,
+  EXPLORING,
+  UPDATE_MAP,
 };
 
 extern RobotState currentState;
+extern SLAMState currentSLAMState;

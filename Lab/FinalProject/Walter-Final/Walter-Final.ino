@@ -87,6 +87,7 @@
 #include "led.h"
 #include "motors.h"
 #include "behaviors.h"
+#include "advancedBehavior.h"
 
 
 /**
@@ -106,6 +107,42 @@ void setupM7() {
   connectWifi();
   connectMqtt();
   subscribeTopics();
+}
+
+void stateBehaviors() {
+  switch (currentState){
+    case STOP:
+      stepperLeft.setSpeed(0);
+      stepperRight.setSpeed(0);
+      break;
+    case MOVE_FORWARD:
+      stepperLeft.setSpeed(defaultStepSpeed);
+      stepperRight.setSpeed(defaultStepSpeed);
+      break;
+    case TURN_LEFT:
+      stepperLeft.setSpeed(-defaultStepSpeed);
+      stepperRight.setSpeed(defaultStepSpeed);
+      break;
+    case TURN_RIGHT:
+      stepperLeft.setSpeed(defaultStepSpeed);
+      stepperRight.setSpeed(-defaultStepSpeed);
+      break;
+    case MOVE_BACKWARD:
+      stepperLeft.setSpeed(-defaultStepSpeed);
+      stepperRight.setSpeed(-defaultStepSpeed);
+      break;
+    case SLAM_BEHAVIOR:
+      SLAM();
+      break;
+    case MATRIX_PATH_PLANNING:
+      matrixPathPlanning(matrix, 0, 0, 5);
+      break;
+    default:
+      stopMove();
+      break;
+  }
+  stepperLeft.runSpeed();
+  stepperRight.runSpeed();
 }
 
 /**

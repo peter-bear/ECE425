@@ -33,6 +33,19 @@ enum ToGoalState {
   AVOID_OBSTACLE_3,
 };
 
+
+// check if there is an obstacle in the front of the robot
+bool frontHasObstacle();
+
+// check if there is an obstacle in the back of the robot
+bool backHasObstacle();
+
+// check if there is an obstacle on the left of the robot
+bool leftHasObstacle();
+
+// check if there is an obstacle on the right of the robot
+bool rightHasObstacle();
+
 void randomWander();
 void collideBehavior();
 void runawayBehavior();
@@ -47,6 +60,3 @@ void followLeft();
 void followRight();
 void followWallBehavior();
 void goToGoalAvoidbs(double x, double y);
-
-
-void stateBehaviors();

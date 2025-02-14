@@ -24,3 +24,4 @@ extern const char* sonarTopic;
 extern const char* encoderTopic;
 extern const char* ledTopic;
 extern const char* moveControlTopic;
+extern const char* mapDataTopic;
