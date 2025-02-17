@@ -6,6 +6,7 @@
 #include "types.h"
 #include "led.h"
 #include "sensors.h"
+#include "advancedBehavior.h"
 #include <Arduino.h>
 
 #define publishDataPeriod 500 // publish data every 500 milliseconds

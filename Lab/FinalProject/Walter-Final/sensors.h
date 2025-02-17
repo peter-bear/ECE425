@@ -3,6 +3,7 @@
 #include "RPC.h"
 
 #define MAX_LIDAR_DISTANCE 40
+#define LIDAR_NUM 4
 
 // a struct to hold lidar data
 struct lidar {

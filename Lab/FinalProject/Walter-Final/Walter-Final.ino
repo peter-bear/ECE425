@@ -135,7 +135,7 @@ void stateBehaviors() {
       SLAM();
       break;
     case MATRIX_PATH_PLANNING:
-      matrixPathPlanning(matrix, 0, 0, 5);
+
       break;
     default:
       stopMove();
@@ -155,7 +155,9 @@ void stateBehaviors() {
  */
 void loopM7() {
   allOFF();
-  currentState = STOP;
+  // currentState = STOP;
+  currentState = MATRIX_PATH_PLANNING;
+  
 
   while (true) {
     // smartWanderBehavior();
@@ -163,9 +165,16 @@ void loopM7() {
     // runawayBehavior();
     // followWallBehavior();
     // goToGoalAvoidbs(72.0, 0.0);
-    mqttClient.poll();
-    publishData();
-    stateBehaviors();
+
+    Position start, goal;
+    start.x = 4; start.y = 0;
+    goal.x = 0; goal.y = 4;
+    PositionQueue path = matrixPathPlanning(start, goal);
+    delay(10000);
+
+    // mqttClient.poll();
+    // publishData();
+    // stateBehaviors();
   }
 }
 

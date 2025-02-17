@@ -17,5 +17,3 @@
 #define LED_DATA_TOPIC "walter/led_data"
 #define ENCODER_DATA_TOPIC "walter/encoder_data"
 #define MAP_DATA_TOPIC "walter/map_data"
-
-int matrix[4][4] = {{0 99 99 0},{0 0 0 0},{0 99 99 0},{0 99 0 0}};

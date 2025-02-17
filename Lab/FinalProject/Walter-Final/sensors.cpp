@@ -5,7 +5,6 @@ int16_t ft_lidar = 8;
 int16_t bk_lidar = 9;
 int16_t lt_lidar = 10;
 int16_t rt_lidar = 11;
-const int lidarNum = 4;
 
 int16_t lidar_pins[4] = { 8, 9, 10, 11 };
 
@@ -60,7 +59,7 @@ int read_sonar(int pin) {
 }
 
 void setupSensors() {
-  for (int i = 0; i < lidarNum; i++) {
+  for (int i = 0; i < LIDAR_NUM; i++) {
     pinMode(lidar_pins[i], OUTPUT);
   }
   RPC.bind("read_lidars", read_lidars);  // bind a method to return the lidar data all at once
