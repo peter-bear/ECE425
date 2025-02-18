@@ -9,7 +9,7 @@
 #include "advancedBehavior.h"
 #include <Arduino.h>
 
-#define publishDataPeriod 100 // publish data every 100 milliseconds
+#define publishDataPeriod 500 // publish data every 100 milliseconds
 
 void connectWifi();
 void connectMqtt();

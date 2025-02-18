@@ -208,7 +208,7 @@ void publishRobotSensorData(){
   sprintf(mqttBuffer, "%d %d", encoder[LEFT_ENCODER], encoder[RIGHT_ENCODER]);
   publishTopic(encoderTopic, mqttBuffer);
 
-  sprintf(mqttBuffer, "%d %d", LED_Status[0], LED_Status[1], LED_Status[2]);
+  sprintf(mqttBuffer, "%d %d %d", LED_Status[0], LED_Status[1], LED_Status[2]);
   publishTopic(ledTopic, mqttBuffer);
 }
 

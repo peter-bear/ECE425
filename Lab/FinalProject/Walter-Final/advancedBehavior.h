@@ -1,3 +1,4 @@
+#pragma once
 #include "behaviors.h"
 #include "positionQueue.h"
 #include "mqtt.h"
@@ -17,7 +18,7 @@ void followLeftAdvanced();
 void followCenterAdvanced();
 void followCenterByDistance(float distance);
 
-void SLAM();
+void initializeBelif();
 
 extern int pathPlanMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y];
 extern int distanceMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y];

@@ -1,7 +1,9 @@
 #include "advancedBehavior.h"
 
-int pathPlanMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = {{0, 99, 99, 0},{0, 0, 0, 0},{0, 99, 99, 0},{0, 99, 0, 0}};
-int distanceMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = {{0, 99, 99, 0},{0, 0, 0, 0},{0, 99, 99, 0},{0, 99, 0, 0}};
+int pathPlanMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0, 99, 99, 0 }, { 0, 0, 0, 0 }, { 0, 99, 99, 0 }, { 0, 99, 0, 0 } };
+int distanceMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0, 99, 99, 0 }, { 0, 0, 0, 0 }, { 0, 99, 99, 0 }, { 0, 99, 0, 0 } };
+double beliefMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y];
+
 
 // move lidarDirections
 Position lidarDirections[LIDAR_NUM] = {
@@ -13,6 +15,9 @@ Position lidarDirections[LIDAR_NUM] = {
 
 float currentRobotDirection = 0.0;
 Position currentRobotPosition;
+currentRobotPosition.x = -1;
+currentRobotPosition.y = -1;
+
 Position robotStartPosition;
 Position robotGoalPosition;
 
@@ -38,7 +43,10 @@ PositionQueue matrixPathPlanning(Position start, Position goal) {
   PositionQueue queue = PositionQueue();
   PositionQueue path = PositionQueue();
 
-  if(distanceMatrix[goal.x][goal.y] == 99){
+  // initialize the distance matrix
+  memcpy(distanceMatrix, pathPlanMatrix, sizeof(pathPlanMatrix));
+
+  if (distanceMatrix[goal.x][goal.y] == 99) {
     Serial.println("The start position is not reachable!");
     return path;
   }
@@ -95,7 +103,7 @@ void debugPath(PositionQueue path) {
   }
 
   // print the path
-  for(int i = 0; i < path.length(); i++){
+  for (int i = 0; i < path.length(); i++) {
     Position current = path.getByIndex(i);
     Serial.print("(");
     Serial.print(current.x);
@@ -105,22 +113,22 @@ void debugPath(PositionQueue path) {
   }
 }
 
-void followRightAdvanced(){
+void followRightAdvanced() {
   currentState = FOLLOWING_RIGHT;
   updateLEDs();
 
-  if(leftHasWall()){
+  if (leftHasWall()) {
     followCenterAdvanced();
   }
 
-  if(!rightHasWall()){
+  if (!rightHasWall()) {
     return;
   }
 
   // Calculate error (how far we are from desired distance)
   double error = lidar_data.right - TARGET_DISTANCE_CM;
   double error_diff = error - lastError;
-  
+
   // Store current values for next iteration
   lastError = error;
 
@@ -130,7 +138,7 @@ void followRightAdvanced(){
     updateLEDs();
     stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
     stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
-  } else{
+  } else {
     // Calculate speed adjustment based on error
     int speedAdjustment = (int)(WallFollowKp * error + WallFollowKd * error_diff);
 
@@ -155,15 +163,15 @@ void followRightAdvanced(){
   }
 }
 
-void followLeftAdvanced(){
+void followLeftAdvanced() {
   currentState = FOLLOWING_LEFT;
   updateLEDs();
 
-  if(rightHasWall()){
+  if (rightHasWall()) {
     followCenterAdvanced();
   }
 
-  if(!leftHasWall()){
+  if (!leftHasWall()) {
     return;
   }
 
@@ -180,7 +188,7 @@ void followLeftAdvanced(){
     updateLEDs();
     stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
     stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
-  } else{
+  } else {
     // Calculate speed adjustment based on error
     int speedAdjustment = (int)(WallFollowKp * error + WallFollowKd * error_diff);
 
@@ -205,7 +213,7 @@ void followLeftAdvanced(){
   }
 }
 
-void followCenterAdvanced(){
+void followCenterAdvanced() {
   currentState = FOLLOWING_CENTER;
   updateLEDs();
 
@@ -242,7 +250,7 @@ void followCenterByDistance(float distance) {
   double distanceSteps = length2Steps(distance);
   long encoderValue = distanceSteps / encoderRatio;
 
-  while(encoder[LEFT_ENCODER] < encoderValue){
+  while (encoder[LEFT_ENCODER] < encoderValue) {
     stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
     stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
 
@@ -258,10 +266,7 @@ void followCenterByDistance(float distance) {
 
     stepperLeft.runSpeed();
     stepperRight.runSpeed();
-
   }
-
-
 }
 
 void moveOneStep(Position currentPosition, Position nextPosition) {
@@ -277,13 +282,12 @@ void moveOneStep(Position currentPosition, Position nextPosition) {
 
   // update the current robot position and direction
   currentRobotDirection = nextDirection;
-
 }
 
 void moveByPath(Position start, Position goal) {
   currentRobotPosition = start;
   plannedPath = matrixPathPlanning(start, goal);
-  for(int i = 0; i < plannedPath.length(); i++){
+  for (int i = 0; i < plannedPath.length(); i++) {
     Position nextPosition = plannedPath.getByIndex(i);
     moveOneStep(currentRobotPosition, nextPosition);
     publishData();
@@ -292,124 +296,24 @@ void moveByPath(Position start, Position goal) {
   currentState = STOP;
 }
 
-// used to store the sensor data around the robot, front, back, left, right, 0 represent no obstacle, 1 represent obstacle
-int obstacleAround[4] = { 0, 0, 0, 0 };
-
-int* getObstacleData(struct lidar lidar_data) {
-  int currentObstacleAround[4] = { 0, 0, 0, 0 };
-  if (frontHasObstacle()) {
-    currentObstacleAround[0] = 1;
-  } else {
-    currentObstacleAround[0] = 0;
+void initializeBelif() {
+  for (int i = 0; i < MATRIX_SIZE_X; i++) {
+    for (int j = 0; j < MATRIX_SIZE_Y; j++) {
+      beliefMatrix[i][j] = 0;
+    }
   }
-
-  if (backHasObstacle()) {
-    currentObstacleAround[1] = 1;
-  } else {
-    currentObstacleAround[1] = 0;
-  }
-
-  if (leftHasObstacle()) {
-    currentObstacleAround[2] = 1;
-  } else {
-    currentObstacleAround[2] = 0;
-  }
-
-  if (rightHasObstacle()) {
-    currentObstacleAround[3] = 1;
-  } else {
-    currentObstacleAround[3] = 0;
-  }
-  return currentObstacleAround;
 }
 
-void exploreOpenSpaceStart() {
-  // check the lidar data to see the space around the robot
-  for (int i = 0; i < 4; i++) {
-    if (obstacleAround[i] == 0) {
-      // move the robot to the open space
-      switch (i) {
-        case 0:
-          // move forward
-          break;
-        case 1:
-          // turn 180 degrees
-          spin(TURN_LEFT, 180, defaultStepSpeed);
-          break;
-        case 2:
-          // turn 90 left
-          spin(TURN_LEFT, 90, defaultStepSpeed);
-          break;
-        case 3:
-          // turn 90 right
-          spin(TURN_RIGHT, 90, defaultStepSpeed);
-          break;
+void motionUpdateBelif(int dx, int dy) {
+  double new_belief[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { 0 };
+  for (int x = 0; x < MATRIX_SIZE_X; x++) {
+    for (int y = 0; y < MATRIX_SIZE_Y; y++) {
+      int new_x = x + dx;
+      int new_y = y + dy;
+      if (new_x >= 0 && new_x < MATRIX_SIZE_X && new_y >= 0 && new_y < MATRIX_SIZE_Y) {
+        new_belief[new_x][new_y] = belief[x][y];
       }
-      break;
     }
   }
-
-  // move the robot to the open space
-  stepperLeft.setSpeed(defaultStepSpeed);
-  stepperRight.setSpeed(defaultStepSpeed);
-
-  currentSLAMState = EXPLORING;
-}
-
-void exploring() {
-  // check the lidar data to see if there is any obstacle around the robot
-  lidar_data = RPC.call("read_lidars").as<struct lidar>();
-  int* currentObstacleAround = getObstacleData(lidar_data);
-
-  // check the obstacle data to see if there is any change
-  for (int i = 0; i < 4; i++) {
-    if (obstacleAround[i] != currentObstacleAround[i]) {
-      // update the obstacle data
-      obstacleAround[i] = currentObstacleAround[i];
-      currentSLAMState = UPDATE_MAP;
-
-      // data change, stop the robot
-      stepperLeft.setSpeed(0);
-      stepperRight.setSpeed(0);
-      break;
-    }
-  }
-}
-
-void detect_obstacle() {
-  // check the lidar data to see if there is any obstacle around the robot
-  lidar_data = RPC.call("read_lidars").as<struct lidar>();
-  int* currentObstacleAround = getObstacleData(lidar_data);
-
-  // update the obstacle data
-  for (int i = 0; i < 4; i++) {
-    obstacleAround[i] = currentObstacleAround[i];
-  }
-
-  currentSLAMState = EXPLORE_START;
-}
-
-void updateMap() {
-  // update the map
-
-  currentSLAMState = DETECT_OBSTACLE;
-}
-
-void SLAM() {
-  switch (currentSLAMState) {
-    case DETECT_OBSTACLE:
-      detect_obstacle();
-      break;
-    case EXPLORE_START:
-      exploreOpenSpaceStart();
-      break;
-    case EXPLORING:
-      exploring();
-      break;
-    case UPDATE_MAP:
-      updateMap();
-      break;
-    default:
-      break;
-  }
+  memcpy(beliefMatrix, new_belief, sizeof(beliefMatrix));
 }

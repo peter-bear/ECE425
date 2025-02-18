@@ -19,9 +19,9 @@
 #define WallFollowKp 3.0  // Proportional gain - adjust this between 1-10
 #define WallFollowKd 0.1  // Derivative gain
 
-#define TARGET_DISTANCE 7.0         // Target distance from wall (inches)
-#define DEADBAND_INNER 6.0          // Inner deadband boundary (inches)
-#define DEADBAND_OUTER 8.0          // Outer deadband boundary (inches)
+#define TARGET_DISTANCE 5.0         // Target distance from wall (inches)
+#define DEADBAND_INNER 4.0          // Inner deadband boundary (inches)
+#define DEADBAND_OUTER 6.0          // Outer deadband boundary (inches)
 #define FOLLOW_WALL_BASE_SPEED 300  // Base motor speed
 
 #define WALL_THRESHOLD 35

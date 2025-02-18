@@ -112,8 +112,7 @@ void setupM7() {
 void stateBehaviors() {
   switch (currentState) {
     case STOP:
-      stepperLeft.setSpeed(0);
-      stepperRight.setSpeed(0);
+      stopMove();
       break;
     case MOVE_FORWARD:
       stepperLeft.setSpeed(defaultStepSpeed);
@@ -179,6 +178,9 @@ void loopM7() {
 
     // followCenterByDistance(18.0);
     // delay(10000);
+
+    if(currentState != STOP)
+      Serial.println("Current State: " + String(currentState));
 
     mqttClient.poll();
     publishData();
