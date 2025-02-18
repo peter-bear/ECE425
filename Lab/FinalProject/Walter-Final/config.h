@@ -16,4 +16,7 @@
 #define MOVE_CONTROL_TOPIC "walter/move_control"
 #define LED_DATA_TOPIC "walter/led_data"
 #define ENCODER_DATA_TOPIC "walter/encoder_data"
-#define MAP_DATA_TOPIC "walter/map_data"
+#define MAP_DATA_TOPIC "walter/matrix_map"
+#define ROBOT_POSITION_TOPIC "walter/robot_position"
+#define ROBOT_PATH_PLAN_TOPIC "walter/robot_path_plan"
+#define ROBOT_PATH_PLAN_POSITION_TOPIC "walter/robot_path_plan_position"

@@ -1,22 +1,7 @@
 #include "advancedBehavior.h"
 
-
-// int matrix[4][4] = {{0, 99, 99, 0},{0, 0, 0, 0},{0, 99, 99, 0},{0, 99, 0, 0}};
-
-int pathPlanMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = {
-  { 0, 0, 0, 0, -1 },
-  { 0, -1, -1, 0, -1 },
-  { 0, 0, 0, 0, 0 },
-  { -1, 0, -1, -1, 0 },
-  { 0, 0, 0, 0, 0 }
-};
-int distanceMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = {
-  { 0, 0, 0, 0, -1 },
-  { 0, -1, -1, 0, -1 },
-  { 0, 0, 0, 0, 0 },
-  { -1, 0, -1, -1, 0 },
-  { 0, 0, 0, 0, 0 }
-};
+int pathPlanMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = {{0, 99, 99, 0},{0, 0, 0, 0},{0, 99, 99, 0},{0, 99, 0, 0}};
+int distanceMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = {{0, 99, 99, 0},{0, 0, 0, 0},{0, 99, 99, 0},{0, 99, 0, 0}};
 
 // move lidarDirections
 Position lidarDirections[LIDAR_NUM] = {
@@ -28,6 +13,10 @@ Position lidarDirections[LIDAR_NUM] = {
 
 float currentRobotDirection = 0.0;
 Position currentRobotPosition;
+Position robotStartPosition;
+Position robotGoalPosition;
+
+PositionQueue plannedPath;
 
 // use degree to represent the directions
 float getRobotDirection(int x, int y) {
@@ -48,6 +37,11 @@ PositionQueue matrixPathPlanning(Position start, Position goal) {
   // initialize the queue
   PositionQueue queue = PositionQueue();
   PositionQueue path = PositionQueue();
+
+  if(distanceMatrix[goal.x][goal.y] == 99){
+    Serial.println("The start position is not reachable!");
+    return path;
+  }
 
   // add the goal position to the queue
   queue.enqueue(goal.x, goal.y);
@@ -85,12 +79,12 @@ PositionQueue matrixPathPlanning(Position start, Position goal) {
     }
   }
 
-  debugPath(path);
+  // debugPath(path);
 
   return path;
 }
 
-void debugPath(PositionQueue plannedPath) {
+void debugPath(PositionQueue path) {
   // print the distanceMatrix
   for (int i = 0; i < MATRIX_SIZE_X; i++) {
     for (int j = 0; j < MATRIX_SIZE_Y; j++) {
@@ -100,9 +94,9 @@ void debugPath(PositionQueue plannedPath) {
     Serial.println();
   }
 
-
-  while (!plannedPath.isEmpty()) {
-    Position current = plannedPath.dequeue();
+  // print the path
+  for(int i = 0; i < path.length(); i++){
+    Position current = path.getByIndex(i);
     Serial.print("(");
     Serial.print(current.x);
     Serial.print(", ");
@@ -111,25 +105,191 @@ void debugPath(PositionQueue plannedPath) {
   }
 }
 
+void followRightAdvanced(){
+  currentState = FOLLOWING_RIGHT;
+  updateLEDs();
+
+  if(leftHasWall()){
+    followCenterAdvanced();
+  }
+
+  if(!rightHasWall()){
+    return;
+  }
+
+  // Calculate error (how far we are from desired distance)
+  double error = lidar_data.right - TARGET_DISTANCE_CM;
+  double error_diff = error - lastError;
+  
+  // Store current values for next iteration
+  lastError = error;
+
+  // If within deadband, drive straight
+  if (lidar_data.right >= DEADBAND_INNER_CM && lidar_data.right <= DEADBAND_OUTER_CM) {
+    currentState = INSIDE_DEADBAND;
+    updateLEDs();
+    stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+    stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+  } else{
+    // Calculate speed adjustment based on error
+    int speedAdjustment = (int)(WallFollowKp * error + WallFollowKd * error_diff);
+
+    // If too far from wall (positive error)
+    if (error > 0) {
+      currentState = TOO_FAR;
+      updateLEDs();
+
+      // Turn towards wall - slow down right motor
+      stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+      stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
+    }
+    // If too close to wall (negative error)
+    else {
+      currentState = TOO_CLOSE;
+      updateLEDs();
+
+      // Turn away from wall - slow down left motor
+      stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+      stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
+    }
+  }
+}
+
+void followLeftAdvanced(){
+  currentState = FOLLOWING_LEFT;
+  updateLEDs();
+
+  if(rightHasWall()){
+    followCenterAdvanced();
+  }
+
+  if(!leftHasWall()){
+    return;
+  }
+
+  // Calculate error (how far we are from desired distance)
+  double error = lidar_data.left - TARGET_DISTANCE_CM;
+  double error_diff = error - lastError;
+
+  // Store current values for next iteration
+  lastError = error;
+
+  // If within deadband, drive straight
+  if (lidar_data.left >= DEADBAND_INNER_CM && lidar_data.left <= DEADBAND_OUTER_CM) {
+    currentState = INSIDE_DEADBAND;
+    updateLEDs();
+    stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+    stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+  } else{
+    // Calculate speed adjustment based on error
+    int speedAdjustment = (int)(WallFollowKp * error + WallFollowKd * error_diff);
+
+    // If too far from wall (positive error)
+    if (error > 0) {
+      currentState = TOO_FAR;
+      updateLEDs();
+
+      // Turn towards wall - slow down left motor
+      stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
+      stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+    }
+    // If too close to wall (negative error)
+    else {
+      currentState = TOO_CLOSE;
+      updateLEDs();
+
+      // Turn away from wall - slow down right motor
+      stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - abs(speedAdjustment));
+      stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+    }
+  }
+}
+
+void followCenterAdvanced(){
+  currentState = FOLLOWING_CENTER;
+  updateLEDs();
+
+  if (leftHasWall() && !rightHasWall()) {
+    followLeft();
+  } else if (!leftHasWall() && rightHasWall()) {
+    followRight();
+  } else if (!leftHasWall() && !rightHasWall()) {
+    return;
+  }
+
+  // Calculate center error (positive means closer to left wall)
+  float error = lidar_data.left - lidar_data.right;
+  float error_diff = error - lastError;
+
+  double speedAdjustment = 0.9 * error + WallFollowKd * error_diff;
+
+  if (abs(error) <= 3) {
+    speedAdjustment = 0;
+  }
+
+  stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED - speedAdjustment);
+  stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED + speedAdjustment);
+
+  lastError = error;
+}
+
+
+void followCenterByDistance(float distance) {
+  // reset the encoder value
+  resetEncoder();
+
+  // calculate the encoder value for the distance
+  double distanceSteps = length2Steps(distance);
+  long encoderValue = distanceSteps / encoderRatio;
+
+  while(encoder[LEFT_ENCODER] < encoderValue){
+    stepperLeft.setSpeed(FOLLOW_WALL_BASE_SPEED);
+    stepperRight.setSpeed(FOLLOW_WALL_BASE_SPEED);
+
+    lidar_data = RPC.call("read_lidars").as<struct lidar>();
+
+    if (leftHasWall() && !rightHasWall()) {
+      followLeftAdvanced();
+    } else if (!leftHasWall() && rightHasWall()) {
+      followRightAdvanced();
+    } else if (leftHasWall() && rightHasWall()) {
+      followCenterAdvanced();
+    }
+
+    stepperLeft.runSpeed();
+    stepperRight.runSpeed();
+
+  }
+
+
+}
+
 void moveOneStep(Position currentPosition, Position nextPosition) {
   float nextDirection = getRobotDirection(nextPosition.x - currentPosition.x, nextPosition.y - currentPosition.y);
 
   // turn the robot to the next direction
   float turnAngle = currentRobotDirection - nextDirection;
+  // Serial.println(turnAngle);
   goToAngle(turnAngle);
 
   // move the robot to the next position
-  forward(24.0, defaultStepSpeed);
+  followCenterByDistance(18.0);
+
+  // update the current robot position and direction
+  currentRobotDirection = nextDirection;
+
 }
 
 void moveByPath(Position start, Position goal) {
-  PositionQueue path = matrixPathPlanning(start, goal);
   currentRobotPosition = start;
-  while (!path.isEmpty()) {
-    Position nextPosition = path.dequeue();
+  plannedPath = matrixPathPlanning(start, goal);
+  for(int i = 0; i < plannedPath.length(); i++){
+    Position nextPosition = plannedPath.getByIndex(i);
     moveOneStep(currentRobotPosition, nextPosition);
+    publishData();
     currentRobotPosition = nextPosition;
   }
+  currentState = STOP;
 }
 
 // used to store the sensor data around the robot, front, back, left, right, 0 represent no obstacle, 1 represent obstacle

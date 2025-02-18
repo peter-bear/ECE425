@@ -9,7 +9,7 @@
 #include "advancedBehavior.h"
 #include <Arduino.h>
 
-#define publishDataPeriod 500 // publish data every 500 milliseconds
+#define publishDataPeriod 100 // publish data every 100 milliseconds
 
 void connectWifi();
 void connectMqtt();
@@ -26,3 +26,6 @@ extern const char* encoderTopic;
 extern const char* ledTopic;
 extern const char* moveControlTopic;
 extern const char* mapDataTopic;
+extern const char* robotPositionTopic;
+extern const char* robotPathPlanTopic;
+extern const char* robotPathPlanPositionTopic;

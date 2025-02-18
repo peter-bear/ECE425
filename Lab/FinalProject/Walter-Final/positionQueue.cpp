@@ -5,6 +5,7 @@
 PositionQueue::PositionQueue() {
     front = nullptr;
     rear = nullptr;
+    size = 0;
 }
 
 // Check if the queue is empty
@@ -26,12 +27,21 @@ void PositionQueue::enqueue(int x, int y) {
         rear->next = newNode;
         rear = newNode;
     }
+    size++;
+}
 
-    // Serial.print("Enqueued: (");
-    // Serial.print(x);
-    // Serial.print(", ");
-    // Serial.print(y);
-    // Serial.println(")");
+Position PositionQueue::getByIndex(int index) {
+    Node* current = front;
+    int i = 0;
+    while (current != nullptr) {
+        if (i == index) {
+            return current->data;
+        }
+        i++;
+        current = current->next;
+    }
+    Position empty = {-1, -1};
+    return empty;
 }
 
 // Dequeue operation to remove and return (x, y) position
@@ -50,12 +60,7 @@ Position PositionQueue::dequeue() {
         rear = nullptr;  // If the queue is empty, reset rear to null
     }
 
-    delete temp;
-    // Serial.print("Dequeued: (");
-    // Serial.print(value.x);
-    // Serial.print(", ");
-    // Serial.print(value.y);
-    // Serial.println(")");
-
+    delete temp;  // Free the memory
+    size--;
     return value;
 }

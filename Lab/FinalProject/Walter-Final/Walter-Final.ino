@@ -110,7 +110,7 @@ void setupM7() {
 }
 
 void stateBehaviors() {
-  switch (currentState){
+  switch (currentState) {
     case STOP:
       stepperLeft.setSpeed(0);
       stepperRight.setSpeed(0);
@@ -118,31 +118,37 @@ void stateBehaviors() {
     case MOVE_FORWARD:
       stepperLeft.setSpeed(defaultStepSpeed);
       stepperRight.setSpeed(defaultStepSpeed);
+      stepperLeft.runSpeed();
+      stepperRight.runSpeed();
       break;
     case TURN_LEFT:
       stepperLeft.setSpeed(-defaultStepSpeed);
       stepperRight.setSpeed(defaultStepSpeed);
+      stepperLeft.runSpeed();
+      stepperRight.runSpeed();
       break;
     case TURN_RIGHT:
       stepperLeft.setSpeed(defaultStepSpeed);
       stepperRight.setSpeed(-defaultStepSpeed);
+      stepperLeft.runSpeed();
+      stepperRight.runSpeed();
       break;
     case MOVE_BACKWARD:
       stepperLeft.setSpeed(-defaultStepSpeed);
       stepperRight.setSpeed(-defaultStepSpeed);
+      stepperLeft.runSpeed();
+      stepperRight.runSpeed();
       break;
     case SLAM_BEHAVIOR:
       SLAM();
       break;
     case MATRIX_PATH_PLANNING:
-
+      moveByPath(robotStartPosition, robotGoalPosition);
       break;
     default:
       stopMove();
       break;
   }
-  stepperLeft.runSpeed();
-  stepperRight.runSpeed();
 }
 
 /**
@@ -155,9 +161,7 @@ void stateBehaviors() {
  */
 void loopM7() {
   allOFF();
-  // currentState = STOP;
-  currentState = MATRIX_PATH_PLANNING;
-  
+  currentState = STOP;
 
   while (true) {
     // smartWanderBehavior();
@@ -166,15 +170,19 @@ void loopM7() {
     // followWallBehavior();
     // goToGoalAvoidbs(72.0, 0.0);
 
-    Position start, goal;
-    start.x = 4; start.y = 0;
-    goal.x = 0; goal.y = 4;
-    PositionQueue path = matrixPathPlanning(start, goal);
-    delay(10000);
+    // Position start, goal;
+    // start.x = 0; start.y = 3;
+    // goal.x = 3; goal.y = 0;
+    // PositionQueue path = matrixPathPlanning(start, goal);
+    // moveByPath(start,goal);
+    // moveOneStep(start,goal);
 
-    // mqttClient.poll();
-    // publishData();
-    // stateBehaviors();
+    // followCenterByDistance(18.0);
+    // delay(10000);
+
+    mqttClient.poll();
+    publishData();
+    stateBehaviors();
   }
 }
 

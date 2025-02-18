@@ -5,6 +5,8 @@ classdef WalterRobot < hgsetget
         sonarData
         ledData
         encoderData
+        matrixMapData
+        robotPosition
         gui
     end
 
@@ -14,8 +16,11 @@ classdef WalterRobot < hgsetget
         ledDataTopic = "walter/led_data";
         encoderDataTopic = "walter/encoder_data";
         moveControlTopic = "walter/move_control";
-        matrixDataTopic = "walter/map_data";
-
+        matrixDataTopic = "walter/matrix_map";
+        robotPositionTopic = "walter/robot_position";
+        robotPathPlanTopic = "walter/robot_path_plan";
+        robotPathPlanPositionTopic = "walter/robot_path_plan_position";
+       
         moveForward = "MOVE_FORWARD";
         moveBackward = "MOVE_BACKWARD";
         turnLeft = "TURN_LEFT";
@@ -49,5 +54,9 @@ classdef WalterRobot < hgsetget
             obj.mqClient.write(obj.moveControlTopic, obj.stopMove);
         end
         
+        function sendPathPlanPosition(obj, positions)
+            obj.mqClient.write(obj.robotPathPlanPositionTopic, positions);
+        end
+
     end
 end
