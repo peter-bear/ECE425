@@ -365,6 +365,10 @@ bool frontHasWall() {
   return lidar_data.front < WALL_THRESHOLD;
 }
 
+bool backHasWall() {
+  return lidar_data.back < WALL_THRESHOLD;
+}
+
 bool isLeftCorner() {
   return frontHasWall() && leftHasWall() && !rightHasWall();
 }

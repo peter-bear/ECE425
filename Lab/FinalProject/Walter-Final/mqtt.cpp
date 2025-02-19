@@ -17,6 +17,12 @@ const char* mapDataTopic = MAP_DATA_TOPIC;
 const char* robotPositionTopic = ROBOT_POSITION_TOPIC;
 const char* robotPathPlanTopic = ROBOT_PATH_PLAN_TOPIC;
 const char* robotPathPlanPositionTopic = ROBOT_PATH_PLAN_POSITION_TOPIC;
+const char* gridLocalizationCommandTopic = GRID_LOCALIZATION_COMMAND_TOPIC;
+const char* gridLocalizationResponseTopic = GRID_LOCALIZATION_RESPONSE_TOPIC;
+
+
+String receivedMessage  = "";
+String receivedTopic = "";
 
 void connectWifi() {
   // attempt to connect to Wifi network:
@@ -85,22 +91,19 @@ void receiveRobotPathPlanMessage(String message) {
   robotGoalPosition.x = x2_str.toInt();
   robotGoalPosition.y = y2_str.toInt();
 
-  // Serial.print("Start position: ");
-  // Serial.print(robotStartPosition.x);
-  // Serial.print(", ");
-  // Serial.println(robotStartPosition.y);
-
-  // Serial.print("Goal position: ");
-  // Serial.print(robotGoalPosition.x);
-  // Serial.print(", ");
-  // Serial.println(robotGoalPosition.y);
-
   currentState = MATRIX_PATH_PLANNING;
 }
 
+void receiveGridLocalizationMessage(String message) {
+  Serial.println("Received grid localization message: " + message);
 
-String receivedMessage  = "";
-String receivedTopic = "";
+  if(message="START"){
+    isLocalizing = true;
+    initializeBelif();
+  }else if(message="STOP"){
+    isLocalizing = false;
+  }
+}
 
 void onMqttMessage(int messageSize) {
   receivedMessage = "";
@@ -124,6 +127,8 @@ void onMqttMessage(int messageSize) {
     receiveMoveControlMessage(receivedMessage);
   }else if(receivedTopic == robotPathPlanPositionTopic){
     receiveRobotPathPlanMessage(receivedMessage);
+  }else if(receivedTopic == gridLocalizationCommandTopic){
+    receiveGridLocalizationMessage(receivedMessage);
   }
 
 }
@@ -165,7 +170,7 @@ void publishMatrixMapData(){
   int index = 0;
   for(int i = 0; i < MATRIX_SIZE_X; i++){
     for(int j = 0; j < MATRIX_SIZE_Y; j++){
-      index += sprintf(mqttBuffer + index, "%d ", pathPlanMatrix[i][j]);
+      index += sprintf(mqttBuffer + index, "%d ", mapMatrix[i][j]);
     }
     index += sprintf(mqttBuffer + index, ";");
   }
@@ -176,6 +181,17 @@ void publishMatrixMapData(){
 void publishRobotPosition(){
   sprintf(mqttBuffer, "%d %d", currentRobotPosition.x, currentRobotPosition.y);
   publishTopic(robotPositionTopic, mqttBuffer);
+}
+
+void publishRobotPossiblePosition(){
+  if(isCalculatingPosition) return;
+  int index = 0;
+  for(int i = 0; i < possiblePositions.length(); i++){
+    Position current = possiblePositions.getByIndex(i);
+    index += sprintf(mqttBuffer + index, "%d %d;", current.x, current.y);
+  }
+
+  publishTopic(gridLocalizationResponseTopic, mqttBuffer);
 }
 
 void publishRobotPathPlan(){
@@ -223,5 +239,6 @@ void publishData() {
     publishMatrixMapData();
     publishRobotPosition();
     publishRobotPathPlan();
+    publishRobotPossiblePosition();
   }
 }

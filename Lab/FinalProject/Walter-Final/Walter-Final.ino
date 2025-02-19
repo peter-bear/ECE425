@@ -115,6 +115,9 @@ void stateBehaviors() {
       stopMove();
       break;
     case MOVE_FORWARD:
+      if (isLocalizing) {
+        gridLocalization();
+      }
       stepperLeft.setSpeed(defaultStepSpeed);
       stepperRight.setSpeed(defaultStepSpeed);
       stepperLeft.runSpeed();
@@ -133,13 +136,13 @@ void stateBehaviors() {
       stepperRight.runSpeed();
       break;
     case MOVE_BACKWARD:
+      if (isLocalizing) {
+        gridLocalization();
+      }
       stepperLeft.setSpeed(-defaultStepSpeed);
       stepperRight.setSpeed(-defaultStepSpeed);
       stepperLeft.runSpeed();
       stepperRight.runSpeed();
-      break;
-    case SLAM_BEHAVIOR:
-      SLAM();
       break;
     case MATRIX_PATH_PLANNING:
       moveByPath(robotStartPosition, robotGoalPosition);
@@ -179,7 +182,7 @@ void loopM7() {
     // followCenterByDistance(18.0);
     // delay(10000);
 
-    if(currentState != STOP)
+    if (currentState != STOP)
       Serial.println("Current State: " + String(currentState));
 
     mqttClient.poll();

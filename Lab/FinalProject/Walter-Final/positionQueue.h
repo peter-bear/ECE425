@@ -27,6 +27,7 @@ public:
     Position getByIndex(int index);
     Position dequeue();  // Remove position from queue
     int length() { return size; }  // Get the size of the queue
+    void clear();
 };
 
 #endif  // POSITION_QUEUE_H

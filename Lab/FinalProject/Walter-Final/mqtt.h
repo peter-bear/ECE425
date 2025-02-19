@@ -29,3 +29,5 @@ extern const char* mapDataTopic;
 extern const char* robotPositionTopic;
 extern const char* robotPathPlanTopic;
 extern const char* robotPathPlanPositionTopic;
+extern const char* gridLocalizationCommandTopic;
+extern const char* gridLocalizationResponseTopic;

@@ -64,3 +64,10 @@ Position PositionQueue::dequeue() {
     size--;
     return value;
 }
+
+
+void PositionQueue::clear(){
+    while(!isEmpty()){
+        dequeue();
+    }
+}

@@ -20,3 +20,5 @@
 #define ROBOT_POSITION_TOPIC "walter/robot_position"
 #define ROBOT_PATH_PLAN_TOPIC "walter/robot_path_plan"
 #define ROBOT_PATH_PLAN_POSITION_TOPIC "walter/robot_path_plan_position"
+#define GRID_LOCALIZATION_COMMAND_TOPIC "walter/grid_localization_command"
+#define GRID_LOCALIZATION_RESPONSE_TOPIC "walter/grid_localization_response"

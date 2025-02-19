@@ -1,9 +1,8 @@
 #include "advancedBehavior.h"
 
-int pathPlanMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0, 99, 99, 0 }, { 0, 0, 0, 0 }, { 0, 99, 99, 0 }, { 0, 99, 0, 0 } };
+int mapMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0, 99, 99, 0 }, { 0, 0, 0, 0 }, { 0, 99, 99, 0 }, { 0, 99, 0, 0 } };
 int distanceMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0, 99, 99, 0 }, { 0, 0, 0, 0 }, { 0, 99, 99, 0 }, { 0, 99, 0, 0 } };
 double beliefMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y];
-
 
 // move lidarDirections
 Position lidarDirections[LIDAR_NUM] = {
@@ -13,15 +12,22 @@ Position lidarDirections[LIDAR_NUM] = {
   { 1, 0 }
 };  // right left up down
 
+Position moveDirections[MOVE_DIRECTIONS] = { { 0, 0 }, { 0, 1 }, { 0, -1 }, { -1, 0 }, { 1, 0 } };  // stay right left up down
+
+// move posibilities for each direction stay, up, down, left, right
+double movePosibilities[MOVE_DIRECTIONS] = {0.1, 0.225, 0.225, 0.225, 0.225};
+
 float currentRobotDirection = 0.0;
-Position currentRobotPosition;
-currentRobotPosition.x = -1;
-currentRobotPosition.y = -1;
+Position currentRobotPosition = {-1, -1};
 
 Position robotStartPosition;
 Position robotGoalPosition;
 
+// store the planned path
 PositionQueue plannedPath;
+
+// store the possible positions
+PositionQueue possiblePositions;
 
 // use degree to represent the directions
 float getRobotDirection(int x, int y) {
@@ -44,7 +50,7 @@ PositionQueue matrixPathPlanning(Position start, Position goal) {
   PositionQueue path = PositionQueue();
 
   // initialize the distance matrix
-  memcpy(distanceMatrix, pathPlanMatrix, sizeof(pathPlanMatrix));
+  memcpy(distanceMatrix, mapMatrix, sizeof(mapMatrix));
 
   if (distanceMatrix[goal.x][goal.y] == 99) {
     Serial.println("The start position is not reachable!");
@@ -297,23 +303,121 @@ void moveByPath(Position start, Position goal) {
 }
 
 void initializeBelif() {
+  memset(beliefMatrix, 0, sizeof(beliefMatrix));
+}
+
+void normalizeBelif() {
+  double sum = 0;
   for (int i = 0; i < MATRIX_SIZE_X; i++) {
     for (int j = 0; j < MATRIX_SIZE_Y; j++) {
-      beliefMatrix[i][j] = 0;
+      sum += beliefMatrix[i][j];
+    }
+  }
+  for (int i = 0; i < MATRIX_SIZE_X; i++) {
+    for (int j = 0; j < MATRIX_SIZE_Y; j++) {
+      beliefMatrix[i][j] /= sum;
     }
   }
 }
 
-void motionUpdateBelif(int dx, int dy) {
-  double new_belief[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { 0 };
-  for (int x = 0; x < MATRIX_SIZE_X; x++) {
-    for (int y = 0; y < MATRIX_SIZE_Y; y++) {
-      int new_x = x + dx;
-      int new_y = y + dy;
-      if (new_x >= 0 && new_x < MATRIX_SIZE_X && new_y >= 0 && new_y < MATRIX_SIZE_Y) {
-        new_belief[new_x][new_y] = belief[x][y];
+void motionUpdateBelif() {
+  double new_belief[MATRIX_SIZE_X][MATRIX_SIZE_Y];
+  for (int i = 0; i < MATRIX_SIZE_X; i++) {
+    for (int j = 0; j < MATRIX_SIZE_Y; j++) {
+      if(mapMatrix[i][j] == 99) {
+        new_belief[i][j] = 0;
+        continue;
+      }
+
+      // loop through all possible directions
+      for(int k = 0; k < MOVE_DIRECTIONS; k++) {
+        Position next = { i + moveDirections[k].x, j + moveDirections[k].y };
+        if (next.x >= 0 && next.x < MATRIX_SIZE_X && next.y >= 0 && next.y < MATRIX_SIZE_Y && mapMatrix[next.x][next.y] != 99) {
+          new_belief[i][j] += movePosibilities[k] * beliefMatrix[next.x][next.y];
+        }
       }
     }
   }
+
   memcpy(beliefMatrix, new_belief, sizeof(beliefMatrix));
+  normalizeBelif();
+}
+
+void sensorUpdateBelif() {
+  // loop through all lidar directions and count the obstacle number
+  lidar_data = RPC.call("read_lidars").as<struct lidar>();
+  int sensorObstacleNum = leftHasWall() + rightHasWall() + frontHasWall() + backHasWall();
+
+  double new_belief[MATRIX_SIZE_X][MATRIX_SIZE_Y];
+
+  for (int i = 0; i < MATRIX_SIZE_X; i++) {
+    for (int j = 0; j < MATRIX_SIZE_Y; j++) {
+      if(mapMatrix[i][j] == 99 || beliefMatrix[i][j] <= 0) {
+        new_belief[i][j] = 0;
+        continue;
+      }
+
+      // check the possible obstacle number
+      int obstacleNum = 0;
+      for(int k = 0; k < LIDAR_NUM; k++) {
+        Position next = { i + lidarDirections[k].x, j + lidarDirections[k].y };
+        // check if the next position is out of the map or is an obstacle
+        if (next.x < 0|| next.x >= MATRIX_SIZE_X || next.y < 0 || next.y >= MATRIX_SIZE_Y || mapMatrix[next.x][next.y] == 99) {
+          obstacleNum += 1;
+        }
+      }
+      
+      double sensorProbability = 0;
+      // compare
+      if (sensorObstacleNum == obstacleNum) {
+        sensorProbability = 0.9;
+      } else {
+        sensorProbability = max(0.0, min(0.9 , abs(sensorObstacleNum - obstacleNum) * 0.9));
+      }
+
+      // update the belief matrix
+      new_belief[i][j] = sensorProbability * beliefMatrix[i][j];
+    }
+  }
+
+  memcpy(beliefMatrix, new_belief, sizeof(beliefMatrix));
+  normalizeBelif();
+}
+
+bool isLocalizing = false;
+bool isCalculatingPosition = false;
+
+void calculatePossiblePositions(){
+  isCalculatingPosition = true;
+  double maxProbability = 0;
+
+  // loop the matrix and get the highest probability position
+  for(int i = 0; i < MATRIX_SIZE_X; i++){
+    for(int j = 0; j < MATRIX_SIZE_Y; j++){
+      if(beliefMatrix[i][j] > maxProbability){
+        // clear the queue
+        possiblePositions.clear();
+
+        // update the max probability
+        maxProbability = beliefMatrix[i][j];
+        possiblePositions.enqueue(i, j);
+      }else if(beliefMatrix[i][j] == maxProbability){
+        possiblePositions.enqueue(i, j);
+      }
+    }
+  }
+
+  // only one possible position
+  if(possiblePositions.length() == 1){
+    currentRobotPosition = possiblePositions.getByIndex(0);
+  }
+
+  isCalculatingPosition = false;
+}
+
+
+void gridLocalization() {
+  motionUpdateBelif();
+  sensorUpdateBelif();
+  calculatePossiblePositions();
 }

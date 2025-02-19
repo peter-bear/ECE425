@@ -48,6 +48,8 @@ bool rightHasObstacle();
 
 bool leftHasWall();
 bool rightHasWall();
+bool backHasWall();
+bool frontHasWall();
 
 void randomWander();
 void collideBehavior();
