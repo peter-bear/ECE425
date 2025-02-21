@@ -493,6 +493,65 @@ void calculatePossiblePositions(){
   isCalculatingPosition = false;
 }
 
+void exploreGrid() {
+    lidar_data = RPC.call("read_lidars").as<struct lidar>();
+    
+    // 3 walls back
+    if(leftHasWall() && rightHasWall() && !frontHasWall() && backHasWall()){
+      forward(GRID_RATIO, defaultStepSpeed);
+    }
+    // 3 walls front
+    else if(leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall()){
+      spin(TO_LEFT, 180, defaultStepSpeed);
+      forward(GRID_RATIO, defaultStepSpeed);
+    }
+    // left 1 wall
+    else if(leftHasWall() && !rightHasWall() && !frontHasWall() && !backHasWall()){
+      // use random, either go forward or turn right
+      if(random(0, 2) == 0){
+        forward(GRID_RATIO, defaultStepSpeed);
+      }else{
+        spin(TO_RIGHT, 90, defaultStepSpeed);
+        forward(GRID_RATIO, defaultStepSpeed);
+      }
+    }
+    // right 1 wall
+    else if(!leftHasWall() && rightHasWall() && !frontHasWall() && !backHasWall()){
+      // use random, either go forward or turn left
+      if(random(0, 2) == 0){
+        forward(GRID_RATIO, defaultStepSpeed);
+      }else{
+        spin(TO_LEFT, 90, defaultStepSpeed);
+        forward(GRID_RATIO, defaultStepSpeed);
+      }  
+    }
+    // front 1 wall, T shape
+    else if(!leftHasWall() && !rightHasWall() && frontHasWall() && !backHasWall()){
+      // either turn left or right
+      if(random(0, 2) == 0){
+        spin(TO_LEFT, 90, defaultStepSpeed);
+        forward(GRID_RATIO, defaultStepSpeed);
+      } else{
+        spin(TO_RIGHT, 90, defaultStepSpeed);
+        forward(GRID_RATIO, defaultStepSpeed);
+      }
+    }
+    // right corner
+    else if(!leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall()){
+      spin(TO_LEFT, 90, defaultStepSpeed);
+      forward(GRID_RATIO, defaultStepSpeed);
+    }
+    // left corner
+    else if(leftHasWall() && !rightHasWall() && frontHasWall() && !backHasWall()){
+      spin(TO_RIGHT, 90, defaultStepSpeed);
+      forward(GRID_RATIO, defaultStepSpeed);
+    }
+    else {
+      forward(GRID_RATIO, defaultStepSpeed);
+    }
+}
+
+
 void gridLocalization() {
   Serial.println("\n\n Grid Localization");
 
@@ -500,31 +559,10 @@ void gridLocalization() {
     mqttClient.poll();
     debugBelif();
 
-    lidar_data = RPC.call("read_lidars").as<struct lidar>();
-    sonar_data = RPC.call("read_sonars").as<struct sonar>();
-
-    if(leftHasWall() && rightHasWall() && !frontHasWall() && backHasWall()){
-      forward(GRID_RATIO, defaultStepSpeed);
-    }else if(leftHasWall() && !rightHasWall() && !frontHasWall() && !backHasWall()){
-      forward(GRID_RATIO, defaultStepSpeed);
-    }else if(leftHasWall() && !rightHasWall() && !frontHasWall() && !backHasWall()){
-      spin(TO_RIGHT, 90, defaultStepSpeed);
-      forward(GRID_RATIO, defaultStepSpeed);
-    }else if(!leftHasWall() && !rightHasWall() && frontHasWall() && !backHasWall()){
-      spin(TO_RIGHT, 90, defaultStepSpeed);
-      forward(GRID_RATIO, defaultStepSpeed);
-    }else if(leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall()){
-      spin(TO_LEFT, 180, defaultStepSpeed);
-      forward(GRID_RATIO, defaultStepSpeed);
-    }else if(!leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall()){
-      spin(TO_LEFT, 90, defaultStepSpeed);
-      forward(GRID_RATIO, defaultStepSpeed);
-    }else {
-      forward(GRID_RATIO, defaultStepSpeed);
-    }
-    
-    sensorUpdateBelif();
+    exploreGrid();
+    // sonar_data = RPC.call("read_sonars").as<struct sonar>();
     motionUpdateBelif();
+    sensorUpdateBelif();
     calculatePossiblePositions();
     publishData();
   }
