@@ -99,9 +99,11 @@ void receiveGridLocalizationMessage(String message) {
 
   if(message="START"){
     isLocalizing = true;
+    currentState = GRID_LOCALIZATION;
     initializeBelif();
   }else if(message="STOP"){
     isLocalizing = false;
+    currentState = STOP;
   }
 }
 
@@ -137,21 +139,15 @@ void subscribeTopics() {
   // set the message receive callback
   mqttClient.onMessage(onMqttMessage);
 
-  Serial.print("Subscribing to topic: ");
-  Serial.println(moveControlTopic);
-  Serial.println();
-
   // subscribe to a topic
   mqttClient.subscribe(moveControlTopic);
   mqttClient.subscribe(robotPathPlanPositionTopic);
+  mqttClient.subscribe(gridLocalizationCommandTopic);
+  
 
   // topics can be unsubscribed using:
   // mqttClient.unsubscribe(topic);
 
-  Serial.print("Topic: ");
-  Serial.println(lidarTopic);
-
-  Serial.println();
 }
 
 void publishTopic(const char *topic, const char *Rvalue) {
@@ -186,6 +182,11 @@ void publishRobotPosition(){
 void publishRobotPossiblePosition(){
   if(isCalculatingPosition) return;
   int index = 0;
+  if(possiblePositions.isEmpty()){
+    // Serial.println("No possible positions to publish");
+    return;
+  }
+
   for(int i = 0; i < possiblePositions.length(); i++){
     Position current = possiblePositions.getByIndex(i);
     index += sprintf(mqttBuffer + index, "%d %d;", current.x, current.y);
@@ -213,11 +214,11 @@ void publishRobotPathPlan(){
 }
 
 void publishRobotSensorData(){
-  lidar_data = RPC.call("read_lidars").as<struct lidar>();
+  // lidar_data = RPC.call("read_lidars").as<struct lidar>();
   sprintf(mqttBuffer, "%d %d %d %d", lidar_data.front, lidar_data.back, lidar_data.left, lidar_data.right);
   publishTopic(lidarTopic, mqttBuffer);
 
-  sonar_data = RPC.call("read_sonars").as<struct sonar>();
+  // sonar_data = RPC.call("read_sonars").as<struct sonar>();
   sprintf(mqttBuffer, "%d %d", lidar_data.left, lidar_data.right);
   publishTopic(sonarTopic, mqttBuffer);
 
@@ -234,7 +235,6 @@ void publishData() {
   unsigned long currentMillis = millis();
   if (currentMillis - mqttPreMillis >= publishDataPeriod) {
     mqttPreMillis = currentMillis;
-
     publishRobotSensorData();
     publishMatrixMapData();
     publishRobotPosition();

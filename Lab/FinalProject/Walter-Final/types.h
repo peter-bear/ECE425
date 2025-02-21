@@ -26,6 +26,7 @@ enum RobotState {
   MOVE_BACKWARD,
   SLAM_BEHAVIOR,
   MATRIX_PATH_PLANNING,
+  GRID_LOCALIZATION,
 };
 
 enum SLAMState{

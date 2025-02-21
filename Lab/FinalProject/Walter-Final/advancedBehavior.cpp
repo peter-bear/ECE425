@@ -2,7 +2,7 @@
 
 int mapMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0, 99, 99, 0 }, { 0, 0, 0, 0 }, { 0, 99, 99, 0 }, { 0, 99, 0, 0 } };
 int distanceMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0, 99, 99, 0 }, { 0, 0, 0, 0 }, { 0, 99, 99, 0 }, { 0, 99, 0, 0 } };
-double beliefMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y];
+double beliefMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 } };
 
 // move lidarDirections
 Position lidarDirections[LIDAR_NUM] = {
@@ -42,6 +42,7 @@ float getRobotDirection(int x, int y) {
   }
 }
 
+
 // implement wavefront algorithm to find the shortest path
 // x represents the row, y represents the column
 PositionQueue matrixPathPlanning(Position start, Position goal) {
@@ -50,7 +51,11 @@ PositionQueue matrixPathPlanning(Position start, Position goal) {
   PositionQueue path = PositionQueue();
 
   // initialize the distance matrix
-  memcpy(distanceMatrix, mapMatrix, sizeof(mapMatrix));
+  for (int i = 0; i < MATRIX_SIZE_X; i++) {
+    for (int j = 0; j < MATRIX_SIZE_Y; j++) {
+      distanceMatrix[i][j] = mapMatrix[i][j];
+    }
+  }
 
   if (distanceMatrix[goal.x][goal.y] == 99) {
     Serial.println("The start position is not reachable!");
@@ -247,7 +252,6 @@ void followCenterAdvanced() {
   lastError = error;
 }
 
-
 void followCenterByDistance(float distance) {
   // reset the encoder value
   resetEncoder();
@@ -302,8 +306,37 @@ void moveByPath(Position start, Position goal) {
   currentState = STOP;
 }
 
+void debugBelif() {
+  for (int i = 0; i < MATRIX_SIZE_X; i++) {
+    for (int j = 0; j < MATRIX_SIZE_Y; j++) {
+      Serial.print(beliefMatrix[i][j]);
+      Serial.print(" ");
+    }
+    Serial.println();
+  }
+}
+
 void initializeBelif() {
-  memset(beliefMatrix, 0, sizeof(beliefMatrix));
+  // count all the zeros in the map matrix
+  int zeroCount = 0;
+  for (int i = 0; i < MATRIX_SIZE_X; i++) {
+    for (int j = 0; j < MATRIX_SIZE_Y; j++) {
+      if (mapMatrix[i][j] == 0) {
+        zeroCount += 1;
+      }
+    }
+  }
+
+  double zeroProbability = 1.0 / zeroCount;
+  for (int i = 0; i < MATRIX_SIZE_X; i++) {
+    for (int j = 0; j < MATRIX_SIZE_Y; j++) {
+      if (mapMatrix[i][j] == 0) {
+        beliefMatrix[i][j] = zeroProbability;
+      } else {
+        beliefMatrix[i][j] = 0;
+      }
+    }
+  }
 }
 
 void normalizeBelif() {
@@ -321,7 +354,7 @@ void normalizeBelif() {
 }
 
 void motionUpdateBelif() {
-  double new_belief[MATRIX_SIZE_X][MATRIX_SIZE_Y];
+  double new_belief[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 } };
   for (int i = 0; i < MATRIX_SIZE_X; i++) {
     for (int j = 0; j < MATRIX_SIZE_Y; j++) {
       if(mapMatrix[i][j] == 99) {
@@ -339,7 +372,13 @@ void motionUpdateBelif() {
     }
   }
 
-  memcpy(beliefMatrix, new_belief, sizeof(beliefMatrix));
+  // copy the new belief matrix to the old one
+  for(int i = 0; i < MATRIX_SIZE_X; i++){
+    for(int j = 0; j < MATRIX_SIZE_Y; j++){
+      beliefMatrix[i][j] = new_belief[i][j];
+    }
+  }
+
   normalizeBelif();
 }
 
@@ -348,7 +387,20 @@ void sensorUpdateBelif() {
   lidar_data = RPC.call("read_lidars").as<struct lidar>();
   int sensorObstacleNum = leftHasWall() + rightHasWall() + frontHasWall() + backHasWall();
 
-  double new_belief[MATRIX_SIZE_X][MATRIX_SIZE_Y];
+  // Serial.print("Sensor Data: ");
+  // Serial.print(lidar_data.front);
+  // Serial.print(" ");
+  // Serial.print(lidar_data.back);
+  // Serial.print(" ");
+  // Serial.print(lidar_data.left);
+  // Serial.print(" ");
+  // Serial.println(lidar_data.right);
+
+  // Serial.print("Sensor Obstacle Number: ");
+  // Serial.println(sensorObstacleNum);
+  
+
+  double new_belief[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 } };
 
   for (int i = 0; i < MATRIX_SIZE_X; i++) {
     for (int j = 0; j < MATRIX_SIZE_Y; j++) {
@@ -372,7 +424,7 @@ void sensorUpdateBelif() {
       if (sensorObstacleNum == obstacleNum) {
         sensorProbability = 0.9;
       } else {
-        sensorProbability = max(0.0, min(0.9 , abs(sensorObstacleNum - obstacleNum) * 0.9));
+        sensorProbability = max(0.1, min(0.9 , exp(-abs(sensorObstacleNum - obstacleNum)) * 0.9));
       }
 
       // update the belief matrix
@@ -380,12 +432,27 @@ void sensorUpdateBelif() {
     }
   }
 
-  memcpy(beliefMatrix, new_belief, sizeof(beliefMatrix));
+  // print the new belief matrix
+  // for(int i = 0; i < MATRIX_SIZE_X; i++){
+  //   for(int j = 0; j < MATRIX_SIZE_Y; j++){
+  //     Serial.print(new_belief[i][j]);
+  //     Serial.print(" ");
+  //   }
+  //   Serial.println();
+  // }
+
+  for(int i = 0; i < MATRIX_SIZE_X; i++){
+    for(int j = 0; j < MATRIX_SIZE_Y; j++){
+      beliefMatrix[i][j] = new_belief[i][j];
+    }
+  }
+
   normalizeBelif();
 }
 
 bool isLocalizing = false;
 bool isCalculatingPosition = false;
+bool findTheLocation = false;
 
 void calculatePossiblePositions(){
   isCalculatingPosition = true;
@@ -410,14 +477,56 @@ void calculatePossiblePositions(){
   // only one possible position
   if(possiblePositions.length() == 1){
     currentRobotPosition = possiblePositions.getByIndex(0);
+    findTheLocation = true;
   }
+
+  // Serial.println("Possible Positions");
+  // for(int i = 0; i < possiblePositions.length(); i++){
+  //   Position current = possiblePositions.getByIndex(i);
+  //   Serial.print("(");
+  //   Serial.print(current.x);
+  //   Serial.print(", ");
+  //   Serial.print(current.y);
+  //   Serial.println(")");
+  // }
 
   isCalculatingPosition = false;
 }
 
-
 void gridLocalization() {
-  motionUpdateBelif();
-  sensorUpdateBelif();
-  calculatePossiblePositions();
+  Serial.println("\n\n Grid Localization");
+
+  while(!findTheLocation && currentState != STOP){
+    mqttClient.poll();
+    debugBelif();
+
+    lidar_data = RPC.call("read_lidars").as<struct lidar>();
+    sonar_data = RPC.call("read_sonars").as<struct sonar>();
+
+    if(leftHasWall() && rightHasWall() && !frontHasWall() && backHasWall()){
+      forward(GRID_RATIO, defaultStepSpeed);
+    }else if(leftHasWall() && !rightHasWall() && !frontHasWall() && !backHasWall()){
+      forward(GRID_RATIO, defaultStepSpeed);
+    }else if(leftHasWall() && !rightHasWall() && !frontHasWall() && !backHasWall()){
+      spin(TO_RIGHT, 90, defaultStepSpeed);
+      forward(GRID_RATIO, defaultStepSpeed);
+    }else if(!leftHasWall() && !rightHasWall() && frontHasWall() && !backHasWall()){
+      spin(TO_RIGHT, 90, defaultStepSpeed);
+      forward(GRID_RATIO, defaultStepSpeed);
+    }else if(leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall()){
+      spin(TO_LEFT, 180, defaultStepSpeed);
+      forward(GRID_RATIO, defaultStepSpeed);
+    }else if(!leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall()){
+      spin(TO_LEFT, 90, defaultStepSpeed);
+      forward(GRID_RATIO, defaultStepSpeed);
+    }else {
+      forward(GRID_RATIO, defaultStepSpeed);
+    }
+    
+    sensorUpdateBelif();
+    motionUpdateBelif();
+    calculatePossiblePositions();
+    publishData();
+  }
+  stopMove();
 }

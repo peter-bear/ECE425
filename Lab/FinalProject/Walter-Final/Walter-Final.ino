@@ -112,37 +112,24 @@ void setupM7() {
 void stateBehaviors() {
   switch (currentState) {
     case STOP:
-      stopMove();
+      stepperLeft.setSpeed(0);
+      stepperRight.setSpeed(0);
       break;
     case MOVE_FORWARD:
-      if (isLocalizing) {
-        gridLocalization();
-      }
       stepperLeft.setSpeed(defaultStepSpeed);
       stepperRight.setSpeed(defaultStepSpeed);
-      stepperLeft.runSpeed();
-      stepperRight.runSpeed();
       break;
     case TURN_LEFT:
       stepperLeft.setSpeed(-defaultStepSpeed);
       stepperRight.setSpeed(defaultStepSpeed);
-      stepperLeft.runSpeed();
-      stepperRight.runSpeed();
       break;
     case TURN_RIGHT:
       stepperLeft.setSpeed(defaultStepSpeed);
       stepperRight.setSpeed(-defaultStepSpeed);
-      stepperLeft.runSpeed();
-      stepperRight.runSpeed();
       break;
     case MOVE_BACKWARD:
-      if (isLocalizing) {
-        gridLocalization();
-      }
       stepperLeft.setSpeed(-defaultStepSpeed);
       stepperRight.setSpeed(-defaultStepSpeed);
-      stepperLeft.runSpeed();
-      stepperRight.runSpeed();
       break;
     case MATRIX_PATH_PLANNING:
       moveByPath(robotStartPosition, robotGoalPosition);
@@ -151,6 +138,8 @@ void stateBehaviors() {
       stopMove();
       break;
   }
+  stepperLeft.runSpeed();
+  stepperRight.runSpeed();
 }
 
 /**
@@ -166,12 +155,6 @@ void loopM7() {
   currentState = STOP;
 
   while (true) {
-    // smartWanderBehavior();
-    // smartFollowBehavior();
-    // runawayBehavior();
-    // followWallBehavior();
-    // goToGoalAvoidbs(72.0, 0.0);
-
     // Position start, goal;
     // start.x = 0; start.y = 3;
     // goal.x = 3; goal.y = 0;
@@ -186,8 +169,16 @@ void loopM7() {
       Serial.println("Current State: " + String(currentState));
 
     mqttClient.poll();
-    publishData();
-    stateBehaviors();
+    // publishData();
+
+    // stateBehaviors();
+
+    // if (isLocalizing) {
+    //   gridLocalization();
+    // }
+
+    gridLocalization();
+    delay(1000);
   }
 }
 

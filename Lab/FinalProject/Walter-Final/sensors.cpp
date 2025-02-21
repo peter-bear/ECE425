@@ -78,7 +78,7 @@ void readSensors() {
   // delay(10);
 
   sonarData.right = read_sonar(leftSnr);
-  // delay(20);
+  // delay(10);
   sonarData.left = read_sonar(rightSnr);
-  // delay(20);
+  // delay(10);
 }
