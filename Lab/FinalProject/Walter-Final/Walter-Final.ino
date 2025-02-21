@@ -134,6 +134,12 @@ void stateBehaviors() {
     case MATRIX_PATH_PLANNING:
       moveByPath(robotStartPosition, robotGoalPosition);
       break;
+    case GRID_LOCALIZATION:
+      gridLocalization();
+      break;
+    case TOPO_LOCALIZATION:
+      topologyLocalization();
+      break;
     default:
       stopMove();
       break;
@@ -168,17 +174,14 @@ void loopM7() {
     if (currentState != STOP)
       Serial.println("Current State: " + String(currentState));
 
+    sonar_data = RPC.call("read_sonars").as<struct sonar>();
+    lidar_data = RPC.call("read_lidars").as<struct lidar>();
+
     mqttClient.poll();
-    // publishData();
+    publishData();
 
-    // stateBehaviors();
-
-    // if (isLocalizing) {
-    //   gridLocalization();
-    // }
-
-    gridLocalization();
-    delay(1000);
+    stateBehaviors();
+    
   }
 }
 

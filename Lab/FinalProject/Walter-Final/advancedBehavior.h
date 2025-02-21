@@ -10,21 +10,23 @@
 #define GRID_RATIO 18.0 
 #define MOVE_DIRECTIONS 5
 
-// enum TOPOLOGY_LANDMARK{
-//     LEFT_CORNER,
-//     RIGHT_CORNER,
-//     FRONT_CORNER,
-//     DEAD_END,
-//     LEFT_HALLWAY,
-//     RIGHT_HALLWAY,
-//     HALLWAY_BOTH,
-//     T_JUNCTION,
-//     UNKNOWN
-// };
+enum TOPOLOGY_LANDMARK{
+    LEFT_CORNER,
+    RIGHT_CORNER,
+    FRONT_CORNER,
+    DEAD_END,
+    LEFT_HALLWAY,
+    RIGHT_HALLWAY,
+    HALLWAY_BOTH,
+    T_JUNCTION,
+    UNKNOWN
+};
 
-// // topology path following
-// TOPOLOGY_LANDMARK checkLandmarkType();
+// topology path following
+TOPOLOGY_LANDMARK checkLandmarkType();
+// void topologyPathFollowing();
 // void debugLandMarkType(TOPOLOGY_LANDMARK mark)
+void topologyLocalization();
 
 // matrix path planning
 void debugPath(PositionQueue plannedPath);
@@ -57,3 +59,5 @@ extern PositionQueue plannedPath;
 extern PositionQueue possiblePositions;
 extern bool isLocalizing;
 extern bool isCalculatingPosition;
+extern bool findTheLocation;
+extern int topoMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y];

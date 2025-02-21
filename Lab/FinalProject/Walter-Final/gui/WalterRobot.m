@@ -22,6 +22,7 @@ classdef WalterRobot < hgsetget
         robotPathPlanPositionTopic = "walter/robot_path_plan_position";
         gridLocalizationResponseTopic = "walter/grid_localization_response";
         gridLocalizationCommandTopic = "walter/grid_localization_command";
+        topoLocalizationCommandTopic = "walter/topo_localization_command";
        
         moveForward = "MOVE_FORWARD";
         moveBackward = "MOVE_BACKWARD";
@@ -65,6 +66,10 @@ classdef WalterRobot < hgsetget
 
         function sendLocalizationCommand(obj, command)
             obj.mqClient.write(obj.gridLocalizationCommandTopic, command);
+        end
+
+        function sendTopoLocalizationCommand(obj, command)
+            obj.mqClient.write(obj.topoLocalizationCommandTopic, command);
         end
 
     end

@@ -19,6 +19,7 @@ const char* robotPathPlanTopic = ROBOT_PATH_PLAN_TOPIC;
 const char* robotPathPlanPositionTopic = ROBOT_PATH_PLAN_POSITION_TOPIC;
 const char* gridLocalizationCommandTopic = GRID_LOCALIZATION_COMMAND_TOPIC;
 const char* gridLocalizationResponseTopic = GRID_LOCALIZATION_RESPONSE_TOPIC;
+const char* topoLocalizationCommandTopic = TOPO_LOCALIZATION_COMMAND_TOPIC;
 
 
 String receivedMessage  = "";
@@ -99,8 +100,22 @@ void receiveGridLocalizationMessage(String message) {
 
   if(message="START"){
     isLocalizing = true;
+    findTheLocation = false;
     currentState = GRID_LOCALIZATION;
     initializeBelif();
+  }else if(message="STOP"){
+    isLocalizing = false;
+    currentState = STOP;
+  }
+}
+
+void receiveTopoLocalizationMessage(String message) {
+  Serial.println("Received topo localization message: " + message);
+
+  if(message="START"){
+    isLocalizing = true;
+    findTheLocation = false;
+    currentState = TOPO_LOCALIZATION;
   }else if(message="STOP"){
     isLocalizing = false;
     currentState = STOP;
@@ -131,6 +146,8 @@ void onMqttMessage(int messageSize) {
     receiveRobotPathPlanMessage(receivedMessage);
   }else if(receivedTopic == gridLocalizationCommandTopic){
     receiveGridLocalizationMessage(receivedMessage);
+  }else if(receivedTopic == topoLocalizationCommandTopic){
+    receiveTopoLocalizationMessage(receivedMessage);
   }
 
 }
@@ -143,8 +160,8 @@ void subscribeTopics() {
   mqttClient.subscribe(moveControlTopic);
   mqttClient.subscribe(robotPathPlanPositionTopic);
   mqttClient.subscribe(gridLocalizationCommandTopic);
+  mqttClient.subscribe(topoLocalizationCommandTopic);
   
-
   // topics can be unsubscribed using:
   // mqttClient.unsubscribe(topic);
 
@@ -166,7 +183,11 @@ void publishMatrixMapData(){
   int index = 0;
   for(int i = 0; i < MATRIX_SIZE_X; i++){
     for(int j = 0; j < MATRIX_SIZE_Y; j++){
-      index += sprintf(mqttBuffer + index, "%d ", mapMatrix[i][j]);
+      if(currentState == GRID_LOCALIZATION){
+        index += sprintf(mqttBuffer + index, "%d ", mapMatrix[i][j]);
+      }else if(currentState == TOPO_LOCALIZATION){
+        index += sprintf(mqttBuffer + index, "%d ", topoMatrix[i][j]);
+      }
     }
     index += sprintf(mqttBuffer + index, ";");
   }

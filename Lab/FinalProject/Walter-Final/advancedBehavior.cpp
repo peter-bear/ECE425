@@ -4,6 +4,9 @@ int mapMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0, 99, 99, 0 }, { 0, 0, 0, 0 }
 int distanceMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0, 99, 99, 0 }, { 0, 0, 0, 0 }, { 0, 99, 99, 0 }, { 0, 99, 0, 0 } };
 double beliefMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 } };
 
+
+int topoMatrix[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 9, 5, 1, 7 }, { 10, 15, 10, 15 }, { 10, 15, 10, 15 }, { 10, 15, 10, 15 } };
+
 // move lidarDirections
 Position lidarDirections[LIDAR_NUM] = {
   { 0, 1 },
@@ -13,6 +16,7 @@ Position lidarDirections[LIDAR_NUM] = {
 };  // right left up down
 
 Position moveDirections[MOVE_DIRECTIONS] = { { 0, 0 }, { 0, 1 }, { 0, -1 }, { -1, 0 }, { 1, 0 } };  // stay right left up down
+
 
 // move posibilities for each direction stay, up, down, left, right
 double movePosibilities[MOVE_DIRECTIONS] = {0.1, 0.225, 0.225, 0.225, 0.225};
@@ -432,15 +436,6 @@ void sensorUpdateBelif() {
     }
   }
 
-  // print the new belief matrix
-  // for(int i = 0; i < MATRIX_SIZE_X; i++){
-  //   for(int j = 0; j < MATRIX_SIZE_Y; j++){
-  //     Serial.print(new_belief[i][j]);
-  //     Serial.print(" ");
-  //   }
-  //   Serial.println();
-  // }
-
   for(int i = 0; i < MATRIX_SIZE_X; i++){
     for(int j = 0; j < MATRIX_SIZE_Y; j++){
       beliefMatrix[i][j] = new_belief[i][j];
@@ -479,16 +474,6 @@ void calculatePossiblePositions(){
     currentRobotPosition = possiblePositions.getByIndex(0);
     findTheLocation = true;
   }
-
-  // Serial.println("Possible Positions");
-  // for(int i = 0; i < possiblePositions.length(); i++){
-  //   Position current = possiblePositions.getByIndex(i);
-  //   Serial.print("(");
-  //   Serial.print(current.x);
-  //   Serial.print(", ");
-  //   Serial.print(current.y);
-  //   Serial.println(")");
-  // }
 
   isCalculatingPosition = false;
 }
@@ -560,11 +545,116 @@ void gridLocalization() {
     debugBelif();
 
     exploreGrid();
-    // sonar_data = RPC.call("read_sonars").as<struct sonar>();
     motionUpdateBelif();
     sensorUpdateBelif();
     calculatePossiblePositions();
     publishData();
   }
+  currentState = STOP;
   stopMove();
 }
+
+TOPOLOGY_LANDMARK checkLandmarkType(){
+  // left corner
+  if(leftHasWall()&& !rightHasWall() && frontHasWall() && !backHasWall()){
+    return LEFT_CORNER;
+  }
+  // right corner
+  else if(!leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall()){
+    return RIGHT_CORNER;
+  }
+  // dead end
+  else if(leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall()){
+    return DEAD_END;
+  }
+  // left hallway
+  else if(!leftHasWall() && rightHasWall() && !frontHasWall() && !backHasWall()){
+    return LEFT_HALLWAY;
+  }
+  // right hallway
+  else if(leftHasWall() && !rightHasWall() && !frontHasWall() && !backHasWall()){
+    return RIGHT_HALLWAY;
+  }
+  // T junction
+  else if(!leftHasWall() && !rightHasWall() && frontHasWall() && !backHasWall()){
+    return T_JUNCTION;
+  }
+  // front corner
+  else if(leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall() && sonar_data.left < 10 && sonar_data.right < 10){
+    return FRONT_CORNER;
+  }
+}
+
+int calculateTopoNum(){
+  lidar_data = RPC.call("read_lidars").as<struct lidar>();
+  int topoNum = 0;
+  if(frontHasWall()){
+    topoNum += 1;
+  }
+  if(leftHasWall()){
+    topoNum += 8;
+  }
+  if(rightHasWall()){
+    topoNum += 2;
+  }
+  if(backHasWall()){
+    topoNum += 4;
+  }
+  return topoNum;
+}
+
+void calculateTopoPossiblePositions(){
+  isCalculatingPosition = true;
+  // loop the matrix and get the highest probability position
+  possiblePositions.clear();
+
+  for(int i = 0; i < MATRIX_SIZE_X; i++){
+    for(int j = 0; j < MATRIX_SIZE_Y; j++){
+      if(topoMatrix[i][j] == calculateTopoNum()){
+        // clear the queue      
+        possiblePositions.enqueue(i, j);
+
+        // Serial.print("Possible Position: ");
+        // Serial.print(i);
+        // Serial.print(" ");
+        // Serial.println(j);
+      }
+    }
+  }
+
+  isCalculatingPosition = false;
+}
+
+
+void topologyLocalization(){
+  Serial.println("\n\n Topology Localization");
+
+  while(!findTheLocation && currentState != STOP){
+    mqttClient.poll();
+    // debugBelif();
+    
+    // calculate the topology number
+    int topoNum = calculateTopoNum();
+    // Serial.println(topoNum);
+
+    // identify the locations
+    calculateTopoPossiblePositions();
+
+    // if only one possible position
+    if(possiblePositions.length() == 1){
+      currentRobotPosition = possiblePositions.getByIndex(0);
+      findTheLocation = true;
+    }else{
+      exploreGrid();
+    }
+    
+    publishData();
+  }
+  currentState = STOP;
+  stopMove();
+}
+
+
+
+
+
