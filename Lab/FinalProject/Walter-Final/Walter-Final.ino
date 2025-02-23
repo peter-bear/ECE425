@@ -1,6 +1,6 @@
 /*
-  Walter-Lab02.ino
-  Yao Xiong & Zhengyang Bi 2024/1/17
+  Walter-Final.ino
+  Yao Xiong & Zhengyang Bi 2025/2/23
 
   This program implements various autonomous behaviors for a wheeled robot using stepper motors and distance sensors.
   The robot features reactive behaviors including obstacle avoidance, runaway response, and following behavior.
@@ -19,7 +19,7 @@
   Sensor Integration:
   - 4 LIDAR sensors (front, back, left, right) for distance measurement
   - 2 wheel encoders for position tracking
-  - PID control system for accurate movement
+  - PD control system for accurate movement
 
   Core Architecture:
   M4 Core - Handles sensor data collection and processing
@@ -109,6 +109,28 @@ void setupM7() {
   subscribeTopics();
 }
 
+/**
+ * @brief Executes the behavior corresponding to the current state of the robot.
+ * 
+ * This function adjusts the speed and direction of the robot's stepper motors 
+ * based on the current state. It handles various robot behaviors such as stopping,
+ * moving forward, turning left or right, moving backward, and specialized behaviors
+ * like matrix path planning, grid localization, and topology localization.
+ * 
+ * - STOP: Stops the robot by setting both motor speeds to zero.
+ * - MOVE_FORWARD: Moves the robot forward at the default speed.
+ * - TURN_LEFT: Rotates the robot to the left by reversing the left motor and 
+ *   driving the right motor forward.
+ * - TURN_RIGHT: Rotates the robot to the right by driving the left motor forward
+ *   and reversing the right motor.
+ * - MOVE_BACKWARD: Moves the robot backward by reversing both motors.
+ * - MATRIX_PATH_PLANNING: Calls a function to move the robot along a planned path.
+ * - GRID_LOCALIZATION: Triggers the grid localization process.
+ * - TOPO_LOCALIZATION: Initiates the topology localization process.
+ * 
+ * After setting the motor speeds, it runs the motors at the specified speeds.
+ */
+
 void stateBehaviors() {
   switch (currentState) {
     case STOP:
@@ -161,16 +183,6 @@ void loopM7() {
   currentState = STOP;
 
   while (true) {
-    // Position start, goal;
-    // start.x = 0; start.y = 3;
-    // goal.x = 3; goal.y = 0;
-    // PositionQueue path = matrixPathPlanning(start, goal);
-    // moveByPath(start,goal);
-    // moveOneStep(start,goal);
-
-    // followCenterByDistance(18.0);
-    // delay(10000);
-
     if (currentState != STOP)
       Serial.println("Current State: " + String(currentState));
 

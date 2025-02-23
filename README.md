@@ -37,9 +37,14 @@ https://docs.google.com/document/d/1W71TCRhlu2uaK8CHVJI5YoJ8dL_T15BMIO-etkvDe6Y/
 
 
 
-## Lab worksheet
+### Lab worksheet
 
 [Lab03 - Wall Following - Feedback and PD Control Worksheet (W2324).docx](https://rosehulman-my.sharepoint.com/:w:/g/personal/biz_rose-hulman_edu/Ebz_fpQalQxBuG2-JIoLxrEBTCS1BUEY6_wwx0o1RHqIaw?e=WFg73r)
 
 
 
+
+
+## Final Project
+
+https://github.com/peter-bear/ECE425

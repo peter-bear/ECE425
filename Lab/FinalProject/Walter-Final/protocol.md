@@ -11,4 +11,5 @@
 | walter/matrix_map                 | 0 99 99 0; 0 0 0 0; 0 99 99 0; 0 99 0 0;                     | map matrix data                          | robot |
 | walter/grid_localization_response | 4 0 ; 4 1; 3 1; 2 1; 2 2; 2 3; 1 3 ; 0 3; 0 4                | all possible positions                   | robot |
 | walter/grid_localization_command  | START / STOP                                                 | start grid localization or stop          | GUI   |
+| walter/topo_localization_command  | START / STOP                                                 | start topological localization or stop   | GUI   |
 

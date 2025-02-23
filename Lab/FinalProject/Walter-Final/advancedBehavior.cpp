@@ -47,8 +47,14 @@ float getRobotDirection(int x, int y) {
 }
 
 
-// implement wavefront algorithm to find the shortest path
-// x represents the row, y represents the column
+/**
+ * @brief Plan a path from start to goal using broadth first search (wavefront algorithm).
+ * @param start the start position
+ * @param goal the goal position
+ * @return the planned path
+ * @note The path is a queue of positions, where the first position is the start position and the last position is the goal position.
+ *       The path is the shortest path from start to goal, and the path is planned using broadth first search.
+ */
 PositionQueue matrixPathPlanning(Position start, Position goal) {
   // initialize the queue
   PositionQueue queue = PositionQueue();
@@ -107,6 +113,10 @@ PositionQueue matrixPathPlanning(Position start, Position goal) {
   return path;
 }
 
+/**
+ * Prints the distance matrix and the path to the serial monitor for debugging purposes.
+ * @param path the path to be printed
+ */
 void debugPath(PositionQueue path) {
   // print the distanceMatrix
   for (int i = 0; i < MATRIX_SIZE_X; i++) {
@@ -128,6 +138,24 @@ void debugPath(PositionQueue path) {
   }
 }
 
+/**
+ * @brief Move the robot by following the right wall using advanced PD control.
+ *
+ * This function reads LIDAR data to determine the presence of walls on the left and right.
+ * It then calculates the error between the current distance and the target distance and uses proportional-derivative control to adjust the motor speeds accordingly.
+ * The algorithm handles different scenarios such as detecting corners and avoiding obstacles.
+ * The function runs indefinitely in a loop, continuously adjusting the motor speeds to follow the right wall.
+ * @note The function assumes the existence of certain global variables and functions:
+ * - FOLLOW_WALL_BASE_SPEED: Constant for the base speed of the motors.
+ * - currentState: Variable to store the current state of the robot.
+ * - updateLEDs(): Function to update the LEDs based on the current state.
+ * - RPC.call("read_lidars"): Function to read LIDAR data.
+ * - leftHasWall(), rightHasWall(): Functions to check for walls.
+ * - followLeft(), followRight(): Functions to follow the left or right wall.
+ * - WallFollowKp, WallFollowKd: Constants for the proportional and derivative terms in the speed adjustment calculation.
+ * - lastError: Variable to store the last error value.
+ * - lidar_data: Struct to store LIDAR readings.
+ */
 void followRightAdvanced() {
   currentState = FOLLOWING_RIGHT;
   updateLEDs();
@@ -178,6 +206,26 @@ void followRightAdvanced() {
   }
 }
 
+/**
+ * @brief Advanced wall following algorithm to follow the left wall using LIDAR data.
+ * 
+ * This function continuously reads LIDAR data to determine the presence of walls on the left and right.
+ * It then calculates the error between the current distance and the target distance and uses proportional-derivative control to adjust the motor speeds accordingly.
+ * The algorithm handles different scenarios such as detecting corners and avoiding obstacles.
+ * The function runs indefinitely in a loop, continuously adjusting the motor speeds to follow the left wall.
+ * 
+ * @note The function assumes the existence of certain global variables and functions:
+ * - FOLLOW_WALL_BASE_SPEED: Base speed for the motors.
+ * - currentState: Variable to store the current state of the robot.
+ * - updateLEDs(): Function to update the LEDs based on the current state.
+ * - RPC.call("read_lidars"): Function to read LIDAR data.
+ * - leftHasWall(), rightHasWall(): Functions to check for walls.
+ * - followCenterAdvanced(): Function to follow the center path.
+ * - TARGET_DISTANCE_CM: Desired distance from the wall.
+ * - DEADBAND_INNER_CM, DEADBAND_OUTER_CM: Deadband range for distance control.
+ * - WallFollowKp, WallFollowKd: Proportional and derivative gains for control.
+ * - lastError: Previous error value for derivative control.
+ */
 void followLeftAdvanced() {
   currentState = FOLLOWING_LEFT;
   updateLEDs();
@@ -228,6 +276,28 @@ void followLeftAdvanced() {
   }
 }
 
+/**
+ * @brief Move the robot by following the center path using advanced PD control.
+ *
+ * This function reads LIDAR data to determine the presence of walls on the left, right,
+ * and front. Depending on the presence of walls, it calls appropriate functions to
+ * follow the left or right wall, or to turn around if a wall is detected in front.
+ * The center error is calculated as the difference between the left and right LIDAR
+ * readings. A speed adjustment is computed based on the error and its difference from
+ * the last error, and the speeds of the stepper motors are adjusted accordingly.
+ * The function runs indefinitely in a loop, continuously adjusting the motor speeds
+ * to follow the center path.
+ * @note The function assumes the existence of certain global variables and functions:
+ * - FOLLOW_WALL_BASE_SPEED: Constant for the base speed of the motors.
+ * - currentState: Variable to store the current state of the robot.
+ * - updateLEDs(): Function to update the LEDs based on the current state.
+ * - RPC.call("read_lidars"): Function to read LIDAR data.
+ * - leftHasWall(), rightHasWall(), frontHasWall(): Functions to check for walls.
+ * - followLeft(), followRight(): Functions to follow the left or right wall.
+ * - WallFollowKd: Constant for the derivative term in the speed adjustment calculation.
+ * - lastError: Variable to store the last error value.
+ * - lidar_data: Struct to store LIDAR readings.
+ */
 void followCenterAdvanced() {
   currentState = FOLLOWING_CENTER;
   updateLEDs();
@@ -256,6 +326,25 @@ void followCenterAdvanced() {
   lastError = error;
 }
 
+/**
+ * @brief Move the robot by a specified distance following the center path.
+ *
+ * This function first resets the encoder value and calculates the encoder value
+ * for the specified distance. It then enters a loop where it continuously moves
+ * the robot forward by following the center path with the followCenterAdvanced()
+ * function until the encoder value reaches the calculated value.
+ *
+ * @param distance The distance to move the robot in inches.
+ * @note The function assumes the existence of certain global variables and functions:
+ * - resetEncoder(): Function to reset the encoder value.
+ * - length2Steps(float length): Function to convert a distance in inches to steps.
+ * - encoderRatio: Constant to convert steps to encoder value.
+ * - encoder: Array to store the current encoder value.
+ * - FOLLOW_WALL_BASE_SPEED: Constant for the base speed of the motors.
+ * - stepperLeft, stepperRight: Instances of stepper motor control.
+ * - followLeftAdvanced(), followRightAdvanced(), followCenterAdvanced():
+ *   Functions to follow the left, right, or center path.
+ */
 void followCenterByDistance(float distance) {
   // reset the encoder value
   resetEncoder();
@@ -283,12 +372,22 @@ void followCenterByDistance(float distance) {
   }
 }
 
+/**
+ * @brief Moves the robot from the current position to the next position in the planned path.
+ *
+ * @param currentPosition The current position of the robot.
+ * @param nextPosition The position the robot should move to.
+ *
+ * This function first calculates the direction the robot needs to turn to face the next position.
+ * It then turns the robot to that direction using the goToAngle() function.
+ * After that, it moves the robot to the next position using the followCenterByDistance() function.
+ * Finally, it updates the current robot position and direction.
+ */
 void moveOneStep(Position currentPosition, Position nextPosition) {
   float nextDirection = getRobotDirection(nextPosition.x - currentPosition.x, nextPosition.y - currentPosition.y);
 
   // turn the robot to the next direction
   float turnAngle = currentRobotDirection - nextDirection;
-  // Serial.println(turnAngle);
   goToAngle(turnAngle);
 
   // move the robot to the next position
@@ -298,6 +397,15 @@ void moveOneStep(Position currentPosition, Position nextPosition) {
   currentRobotDirection = nextDirection;
 }
 
+/**
+ * @brief Moves the robot by following the planned path from start to goal.
+ * @param start the start position of the path
+ * @param goal the goal position of the path
+ * @note This function will call the matrixPathPlanning function to plan the path,
+ *       and then call the moveOneStep function to move the robot to the next
+ *       position until it reaches the goal position. It will also publish the
+ *       data when the robot is moving.
+ */
 void moveByPath(Position start, Position goal) {
   currentRobotPosition = start;
   plannedPath = matrixPathPlanning(start, goal);
@@ -310,6 +418,9 @@ void moveByPath(Position start, Position goal) {
   currentState = STOP;
 }
 
+/**
+ * Prints the belief matrix to the serial monitor for debugging purposes.
+ */
 void debugBelif() {
   for (int i = 0; i < MATRIX_SIZE_X; i++) {
     for (int j = 0; j < MATRIX_SIZE_Y; j++) {
@@ -320,6 +431,10 @@ void debugBelif() {
   }
 }
 
+/**
+ * Initializes the belief matrix by assigning equal probability to all positions with a 0 in the map matrix.
+ * All other positions are assigned a probability of 0.
+ */
 void initializeBelif() {
   // count all the zeros in the map matrix
   int zeroCount = 0;
@@ -343,6 +458,11 @@ void initializeBelif() {
   }
 }
 
+/**
+ * Normalizes the belief matrix to ensure that the sum of all elements is 1.
+ * This is necessary to ensure that the belief matrix represents a valid probability distribution.
+ * The function loops through all the elements of the belief matrix, sums them up, and then divides each element by the sum.
+ */
 void normalizeBelif() {
   double sum = 0;
   for (int i = 0; i < MATRIX_SIZE_X; i++) {
@@ -357,6 +477,11 @@ void normalizeBelif() {
   }
 }
 
+/**
+ * Updates the belief matrix based on the motion model.
+ * This function takes the motion probabilities and the current belief matrix, and updates the belief matrix by multiplying the motion probabilities with the current belief at each position.
+ * The function then normalizes the belief matrix.
+ */
 void motionUpdateBelif() {
   double new_belief[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 } };
   for (int i = 0; i < MATRIX_SIZE_X; i++) {
@@ -386,23 +511,16 @@ void motionUpdateBelif() {
   normalizeBelif();
 }
 
+/**
+ * Updates the belief matrix based on sensor data.
+ * This function takes the sensor data, counts the obstacle number, and compares it with the possible obstacle number.
+ * The function then updates the belief matrix by multiplying the sensor probability with the current belief at each position.
+ * Finally, the function normalizes the belief matrix.
+ */
 void sensorUpdateBelif() {
   // loop through all lidar directions and count the obstacle number
   lidar_data = RPC.call("read_lidars").as<struct lidar>();
   int sensorObstacleNum = leftHasWall() + rightHasWall() + frontHasWall() + backHasWall();
-
-  // Serial.print("Sensor Data: ");
-  // Serial.print(lidar_data.front);
-  // Serial.print(" ");
-  // Serial.print(lidar_data.back);
-  // Serial.print(" ");
-  // Serial.print(lidar_data.left);
-  // Serial.print(" ");
-  // Serial.println(lidar_data.right);
-
-  // Serial.print("Sensor Obstacle Number: ");
-  // Serial.println(sensorObstacleNum);
-  
 
   double new_belief[MATRIX_SIZE_X][MATRIX_SIZE_Y] = { { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0, 0.0 } };
 
@@ -449,6 +567,14 @@ bool isLocalizing = false;
 bool isCalculatingPosition = false;
 bool findTheLocation = false;
 
+
+/**
+ * Calculates possible positions based on the probability matrix.
+ * This function loops through the probability matrix, finds the highest probability position, and updates the possible positions queue.
+ * If only one possible position is found, the robot is considered to be localized and the function ends.
+ * The function also checks for incoming messages and stops if the STOP command is received.
+ * The function publishes the robot position and lidar data after each iteration.
+ */
 void calculatePossiblePositions(){
   isCalculatingPosition = true;
   double maxProbability = 0;
@@ -478,36 +604,47 @@ void calculatePossiblePositions(){
   isCalculatingPosition = false;
 }
 
+/**
+ * Explores the grid environment using lidar sensor data.
+ * This function checks the robot's surroundings and makes decisions based on the presence or absence of walls in different directions.
+ * It uses a series of if-else statements to determine the robot's next action, such as moving forward, spinning left or right, or turning at a corner.
+ */
 void exploreGrid() {
     lidar_data = RPC.call("read_lidars").as<struct lidar>();
     
     // 3 walls back
     if(leftHasWall() && rightHasWall() && !frontHasWall() && backHasWall()){
-      forward(GRID_RATIO, defaultStepSpeed);
+      // forward(GRID_RATIO, defaultStepSpeed);
+      followCenterByDistance(GRID_RATIO);
     }
     // 3 walls front
     else if(leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall()){
       spin(TO_LEFT, 180, defaultStepSpeed);
-      forward(GRID_RATIO, defaultStepSpeed);
+      // forward(GRID_RATIO, defaultStepSpeed);
+      followCenterByDistance(GRID_RATIO);
     }
     // left 1 wall
     else if(leftHasWall() && !rightHasWall() && !frontHasWall() && !backHasWall()){
       // use random, either go forward or turn right
       if(random(0, 2) == 0){
-        forward(GRID_RATIO, defaultStepSpeed);
+        // forward(GRID_RATIO, defaultStepSpeed);
+        followCenterByDistance(GRID_RATIO);
       }else{
         spin(TO_RIGHT, 90, defaultStepSpeed);
-        forward(GRID_RATIO, defaultStepSpeed);
+        // forward(GRID_RATIO, defaultStepSpeed);
+        followCenterByDistance(GRID_RATIO);
       }
     }
     // right 1 wall
     else if(!leftHasWall() && rightHasWall() && !frontHasWall() && !backHasWall()){
       // use random, either go forward or turn left
       if(random(0, 2) == 0){
-        forward(GRID_RATIO, defaultStepSpeed);
+        // forward(GRID_RATIO, defaultStepSpeed);
+        followCenterByDistance(GRID_RATIO);
       }else{
         spin(TO_LEFT, 90, defaultStepSpeed);
-        forward(GRID_RATIO, defaultStepSpeed);
+        // forward(GRID_RATIO, defaultStepSpeed);
+        followCenterByDistance(GRID_RATIO);
       }  
     }
     // front 1 wall, T shape
@@ -515,28 +652,41 @@ void exploreGrid() {
       // either turn left or right
       if(random(0, 2) == 0){
         spin(TO_LEFT, 90, defaultStepSpeed);
-        forward(GRID_RATIO, defaultStepSpeed);
+        // forward(GRID_RATIO, defaultStepSpeed);
+        followCenterByDistance(GRID_RATIO);
       } else{
         spin(TO_RIGHT, 90, defaultStepSpeed);
-        forward(GRID_RATIO, defaultStepSpeed);
+        // forward(GRID_RATIO, defaultStepSpeed);
+        followCenterByDistance(GRID_RATIO);
       }
     }
     // right corner
     else if(!leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall()){
       spin(TO_LEFT, 90, defaultStepSpeed);
-      forward(GRID_RATIO, defaultStepSpeed);
+      // forward(GRID_RATIO, defaultStepSpeed);
+      followCenterByDistance(GRID_RATIO);
     }
     // left corner
     else if(leftHasWall() && !rightHasWall() && frontHasWall() && !backHasWall()){
       spin(TO_RIGHT, 90, defaultStepSpeed);
-      forward(GRID_RATIO, defaultStepSpeed);
+      // forward(GRID_RATIO, defaultStepSpeed);
+      followCenterByDistance(GRID_RATIO);
     }
     else {
-      forward(GRID_RATIO, defaultStepSpeed);
+      // forward(GRID_RATIO, defaultStepSpeed);
+      followCenterByDistance(GRID_RATIO);
     }
 }
 
 
+
+
+/**
+ * Grid localization function that uses lidar sensor data to update the belief matrix, explore the grid environment, and determine the robot's position.
+ * It continues to run until the robot has found its position or the STOP state is received.
+ * During each iteration, it polls for MQTT messages, updates the belief matrix based on the robot's motion and sensor data, and calculates the possible positions based on the belief matrix.
+ * It then publishes the possible positions to the MQTT broker and moves the robot to explore the grid environment.
+ */
 void gridLocalization() {
   Serial.println("\n\n Grid Localization");
 
@@ -554,37 +704,13 @@ void gridLocalization() {
   stopMove();
 }
 
-TOPOLOGY_LANDMARK checkLandmarkType(){
-  // left corner
-  if(leftHasWall()&& !rightHasWall() && frontHasWall() && !backHasWall()){
-    return LEFT_CORNER;
-  }
-  // right corner
-  else if(!leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall()){
-    return RIGHT_CORNER;
-  }
-  // dead end
-  else if(leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall()){
-    return DEAD_END;
-  }
-  // left hallway
-  else if(!leftHasWall() && rightHasWall() && !frontHasWall() && !backHasWall()){
-    return LEFT_HALLWAY;
-  }
-  // right hallway
-  else if(leftHasWall() && !rightHasWall() && !frontHasWall() && !backHasWall()){
-    return RIGHT_HALLWAY;
-  }
-  // T junction
-  else if(!leftHasWall() && !rightHasWall() && frontHasWall() && !backHasWall()){
-    return T_JUNCTION;
-  }
-  // front corner
-  else if(leftHasWall() && rightHasWall() && frontHasWall() && !backHasWall() && sonar_data.left < 10 && sonar_data.right < 10){
-    return FRONT_CORNER;
-  }
-}
 
+/**
+ * Calculates the topology number based on the lidar sensor data.
+ * It represents the status of the walls around the robot as a binary number.
+ * The least significant bit is the front wall, the second least significant bit is the right wall, the third least significant bit is the back wall, and the most significant bit is the left wall.
+ * The function returns the calculated topology number as an integer.
+ */
 int calculateTopoNum(){
   lidar_data = RPC.call("read_lidars").as<struct lidar>();
   int topoNum = 0;
@@ -603,6 +729,13 @@ int calculateTopoNum(){
   return topoNum;
 }
 
+
+/**
+ * Calculates possible positions based on the topology number.
+ * This function clears the current list of possible positions and iterates over the topology matrix.
+ * It enqueues all positions where the matrix value matches the calculated topology number, indicating potential robot locations.
+ */
+
 void calculateTopoPossiblePositions(){
   isCalculatingPosition = true;
   // loop the matrix and get the highest probability position
@@ -613,11 +746,6 @@ void calculateTopoPossiblePositions(){
       if(topoMatrix[i][j] == calculateTopoNum()){
         // clear the queue      
         possiblePositions.enqueue(i, j);
-
-        // Serial.print("Possible Position: ");
-        // Serial.print(i);
-        // Serial.print(" ");
-        // Serial.println(j);
       }
     }
   }
@@ -626,16 +754,24 @@ void calculateTopoPossiblePositions(){
 }
 
 
+/**
+ * This function implements the topology localization algorithm. It first
+ * calculates the topology number of the current position, then identifies the
+ * possible positions in the topology matrix with the same topology number.
+ * If only one possible position is found, the robot is considered to be
+ * localized and the function ends. Otherwise, the robot moves to the next
+ * position in the grid and repeats the process. The function also checks
+ * for incoming messages and stops if the STOP command is received.
+ * The function publishes the robot position and lidar data after each iteration.
+ */
 void topologyLocalization(){
   Serial.println("\n\n Topology Localization");
 
   while(!findTheLocation && currentState != STOP){
     mqttClient.poll();
-    // debugBelif();
-    
+  
     // calculate the topology number
     int topoNum = calculateTopoNum();
-    // Serial.println(topoNum);
 
     // identify the locations
     calculateTopoPossiblePositions();
@@ -653,8 +789,3 @@ void topologyLocalization(){
   currentState = STOP;
   stopMove();
 }
-
-
-
-
-

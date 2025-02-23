@@ -6,8 +6,6 @@
 // MQTT Configuration
 #define SECRET_SSID "RHIT-OPEN"
 #define SECRET_PASS ""
-// #define SECRET_SSID "0x71A"
-// #define SECRET_PASS "343218180x71A"
 #define MQTT_SERVER "test.mosquitto.org"
 #define MQTT_PORT 1883
 

@@ -25,6 +25,12 @@ const char* topoLocalizationCommandTopic = TOPO_LOCALIZATION_COMMAND_TOPIC;
 String receivedMessage  = "";
 String receivedTopic = "";
 
+/**
+ * Connects to the WiFi network specified by the SECRET_SSID and SECRET_PASS
+ * variables. This function will retry indefinitely if the connection fails.
+ * If the connection is successful, it prints a message to the serial monitor
+ * indicating success.
+ */
 void connectWifi() {
   // attempt to connect to Wifi network:
   Serial.print("Attempting to connect to SSID: ");
@@ -40,6 +46,13 @@ void connectWifi() {
   Serial.println();
 }
 
+/**
+ * Attempts to connect to the MQTT broker specified by the broker variable.
+ * If the connection is successful, it prints a message to the serial monitor
+ * indicating success.
+ * If the connection fails, it prints a message to the serial monitor
+ * indicating the error code and then enters an infinite loop.
+ */
 void connectMqtt() {
   // attempt to connect to MQTT broker:
   Serial.print("Attempting to connect to the MQTT broker: ");
@@ -57,6 +70,12 @@ void connectMqtt() {
   Serial.println();
 }
 
+/**
+ * Handles move control messages received from the MQTT broker.
+ * The message is one of "MOVE_FORWARD", "TURN_LEFT", "TURN_RIGHT", "MOVE_BACKWARD", or "STOP".
+ * The function sets the currentState accordingly.
+ * @param message The message received from the MQTT broker.
+ */
 void receiveMoveControlMessage(String message) {
   if(message == "MOVE_FORWARD") {
     currentState = MOVE_FORWARD;
@@ -71,6 +90,13 @@ void receiveMoveControlMessage(String message) {
   }
 }
 
+/**
+ * Handles robot path planning messages received from the MQTT broker.
+ * The message is in the format "x1 y1 x2 y2" where (x1, y1) is the start position
+ * and (x2, y2) is the goal position. The function parses the message to get the
+ * start and goal positions and sets the currentState to MATRIX_PATH_PLANNING.
+ * @param message The message received from the MQTT broker.
+ */
 void receiveRobotPathPlanMessage(String message) {
   // parse the message to get the path
   // plannedPath = parsePath(message);
@@ -95,32 +121,65 @@ void receiveRobotPathPlanMessage(String message) {
   currentState = MATRIX_PATH_PLANNING;
 }
 
+/**
+ * Handles grid localization messages received from the MQTT broker.
+ * If the message is "START", it enables the grid localization state and resets
+ * the robot's position to unknown.
+ * If the message is "STOP", it disables the grid localization state and stops
+ * the robot's movement.
+ * @param message The message received from the MQTT broker.
+ */
 void receiveGridLocalizationMessage(String message) {
   Serial.println("Received grid localization message: " + message);
 
-  if(message="START"){
+  if(message=="START"){
     isLocalizing = true;
     findTheLocation = false;
     currentState = GRID_LOCALIZATION;
     initializeBelif();
-  }else if(message="STOP"){
+  }else if(message=="STOP"){
     isLocalizing = false;
     currentState = STOP;
   }
 }
 
+/**
+ * Handles topology localization messages received from the MQTT broker.
+ * This function is triggered when a message is received from the topic
+ * specified by the topoLocalizationCommandTopic variable.
+ * It sets the current state to TOPO_LOCALIZATION if the message is "START",
+ * and to STOP if the message is "STOP". It also sets the findTheLocation flag
+ * to false and the isLocalizing flag to true when starting topology localization.
+ * @param message The message received from the MQTT broker.
+ */
 void receiveTopoLocalizationMessage(String message) {
   Serial.println("Received topo localization message: " + message);
 
-  if(message="START"){
+  if(message=="START"){
     isLocalizing = true;
     findTheLocation = false;
     currentState = TOPO_LOCALIZATION;
-  }else if(message="STOP"){
+  }else if(message=="STOP"){
     isLocalizing = false;
     currentState = STOP;
   }
 }
+
+/**
+ * Callback function that is triggered when an MQTT message is received.
+ * This function processes the received message by determining its topic
+ * and content. It prints the topic, message size, and message content to
+ * the serial monitor. Based on the topic, it delegates the message to the
+ * appropriate handler function for further processing.
+ * 
+ * @param messageSize The size of the received message in bytes.
+ * 
+ * The function handles messages for the following topics:
+ * - moveControlTopic: Delegates to receiveMoveControlMessage to handle robot movement commands.
+ * - robotPathPlanPositionTopic: Delegates to receiveRobotPathPlanMessage to handle path planning positions.
+ * - gridLocalizationCommandTopic: Delegates to receiveGridLocalizationMessage to handle grid localization commands.
+ * - topoLocalizationCommandTopic: Delegates to receiveTopoLocalizationMessage to handle topology localization commands.
+ */
 
 void onMqttMessage(int messageSize) {
   receivedMessage = "";
@@ -152,6 +211,15 @@ void onMqttMessage(int messageSize) {
 
 }
 
+/**
+ * Subscribes to the necessary MQTT topics to receive control messages and 
+ * positioning information from the server.
+ * The topics subscribed to are:
+ * - moveControlTopic: control messages for the robot's movement (forward, backward, left, right, stop)
+ * - robotPathPlanPositionTopic: the robot's path planning position
+ * - gridLocalizationCommandTopic: the command to start/stop the grid localization process
+ * - topoLocalizationCommandTopic: the command to start/stop the topology localization process
+ */
 void subscribeTopics() {
   // set the message receive callback
   mqttClient.onMessage(onMqttMessage);
@@ -167,6 +235,11 @@ void subscribeTopics() {
 
 }
 
+/**
+ * Publishes a message to the MQTT broker with the given topic and value.
+ * @param topic the topic to publish the message to
+ * @param Rvalue the value to publish
+ */
 void publishTopic(const char *topic, const char *Rvalue) {
   //publish the message to the specific topic
   mqttClient.beginMessage(topic);
@@ -179,6 +252,14 @@ void publishTopic(const char *topic, const char *Rvalue) {
 unsigned long mqttPreMillis = 0;
 char mqttBuffer[64];
 
+/**
+ * Publishes the current map data to the MQTT broker as a string.
+ * The map data is represented as a matrix of numbers, where each number represents the type of cell in the grid.
+ * The matrix is represented as a string of numbers separated by spaces, and each row is separated by a semicolon.
+ * The function first determines the current state (grid localization or topology localization) and then
+ * loops through the matrix, printing each value to the string buffer.
+ * Finally, the function publishes the string buffer to the MQTT broker with the topic specified by the mapDataTopic variable.
+ */
 void publishMatrixMapData(){
   int index = 0;
   for(int i = 0; i < MATRIX_SIZE_X; i++){
@@ -194,6 +275,13 @@ void publishMatrixMapData(){
 
   publishTopic(mapDataTopic, mqttBuffer);
 }
+
+/**
+ * Publishes the current position of the robot to the MQTT broker.
+ * The position is formatted as "x y" where x and y are the coordinates
+ * of the robot's current position. The message is published to the topic
+ * specified by the robotPositionTopic variable.
+ */
 
 void publishRobotPosition(){
   sprintf(mqttBuffer, "%d %d", currentRobotPosition.x, currentRobotPosition.y);
@@ -216,6 +304,13 @@ void publishRobotPossiblePosition(){
   publishTopic(gridLocalizationResponseTopic, mqttBuffer);
 }
 
+/**
+ * Publishes the current path planned by the robot to the MQTT broker.
+ * The path is represented as a string of x, y coordinates separated by spaces and semicolons.
+ * For example, "0 0; 1 0; 2 0; 3 0" represents a path from (0,0) to (3,0).
+ * If the path is empty, the function returns without publishing anything.
+ * The function publishes the message to the topic specified by the robotPathPlanTopic variable.
+ */
 void publishRobotPathPlan(){
   PositionQueue path = plannedPath;
 
@@ -234,6 +329,13 @@ void publishRobotPathPlan(){
   publishTopic(robotPathPlanTopic, mqttBuffer);
 }
 
+/**
+ * Publishes the current sensor readings to the MQTT broker as follows:
+ * - lidarTopic: front, back, left, right
+ * - sonarTopic: left, right
+ * - encoderTopic: left, right
+ * - ledTopic: status of LED 0, 1, 2
+ */
 void publishRobotSensorData(){
   // lidar_data = RPC.call("read_lidars").as<struct lidar>();
   sprintf(mqttBuffer, "%d %d %d %d", lidar_data.front, lidar_data.back, lidar_data.left, lidar_data.right);
