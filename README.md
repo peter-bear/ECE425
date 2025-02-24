@@ -48,3 +48,10 @@ https://docs.google.com/document/d/1W71TCRhlu2uaK8CHVJI5YoJ8dL_T15BMIO-etkvDe6Y/
 ## Final Project
 
 https://github.com/peter-bear/ECE425
+
+
+
+### Lab report
+
+[Final report-ECE425.docx](https://rosehulman-my.sharepoint.com/:w:/g/personal/biz_rose-hulman_edu/EUa056rq7ThBtBw5aKpBowoBPGoBpFiLPtxXGMs18f18HQ?e=xCd1Uq)
+
